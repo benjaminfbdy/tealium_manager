@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment
+.env
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+.encryption.key
+
+# Database file
+tealium_manager.db
+
+# Local development utilities and credentials
+utils/
