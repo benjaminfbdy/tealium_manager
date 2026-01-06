@@ -14,8 +14,8 @@ __pycache__/
 .DS_Store
 .encryption.key
 
-# Database file
-tealium_manager.db
+# Database files
+*.db
 
-# Local development utilities and credentials
-# utils/
+# Custom credential files
+utils/credentials.txt
