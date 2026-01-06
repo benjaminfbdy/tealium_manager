@@ -50,6 +50,20 @@ class TealiumClient:
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Échec de l'authentification V2 : {e}")
 
+    def get_accounts(self) -> list:
+        """
+        Récupère la liste des comptes accessibles via l'API V2.
+        """
+        accounts_url = f"{self.base_url_v2}/accounts"
+        headers = {"Authorization": f"Bearer {self.v2_token}"}
+        try:
+            response = self.session.get(accounts_url, headers=headers)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"ERREUR: Impossible de récupérer les comptes. {e}")
+            return []
+
     def _authenticate_v3(self, account, profile):
         """
         S'authentifie à l'API V3 pour obtenir un token JWT et un hôte régional.

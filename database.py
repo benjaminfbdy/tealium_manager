@@ -120,13 +120,32 @@ def load_profiles_by_account(account_name: str) -> list:
     if not conn: return []
 
     try:
-        sql = "SELECT profile_name, is_selected FROM profiles WHERE account_name = ?"
+        sql = "SELECT account_name, profile_name, is_selected FROM profiles WHERE account_name = ?"
         cursor = conn.cursor()
         cursor.execute(sql, (account_name,))
         return cursor.fetchall() # Retourne une liste de tuples (profile_name, is_selected)
     except Error as e:
         print(f"Erreur lors du chargement des profils pour '{account_name}': {e}")
         return []
+    finally:
+        conn.close()
+
+def delete_profiles(profiles_to_delete: list):
+    """
+    Supprime une liste de profils.
+    profiles_to_delete est une liste de tuples: (account_name, profile_name)
+    """
+    conn = create_connection()
+    if not conn: return
+
+    try:
+        sql = "DELETE FROM profiles WHERE account_name = ? AND profile_name = ?"
+        cursor = conn.cursor()
+        cursor.executemany(sql, profiles_to_delete)
+        conn.commit()
+        print(f"INFO: {cursor.rowcount} profils supprimés.")
+    except Error as e:
+        print(f"Erreur lors de la suppression des profils: {e}")
     finally:
         conn.close()
 

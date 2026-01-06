@@ -18,4 +18,4 @@ __pycache__/
 tealium_manager.db
 
 # Local development utilities and credentials
-utils/
+# utils/
