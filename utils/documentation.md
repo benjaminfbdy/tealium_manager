@@ -55,3 +55,23 @@
 *   Ajouter des tests unitaires pour le `TealiumClient`, les `services` et les fonctions `database`.
 *   Explorer l'utilisation de `st.session_state.page` si une navigation plus complexe est requise au-delà de la navigation par fichier de Streamlit.
 *   Revoir la possibilité d'utiliser `st.data_editor` avec `ButtonColumn` si l'environnement Streamlit de l'utilisateur est mis à jour à une version plus récente et stable.
+
+## [Sprint 6] - Améliorations de l'expérience utilisateur pour la mise en cache
+
+**👔 Vue Métier** :
+*   Le processus de mise en cache des révisions offre désormais un feedback visuel détaillé, avec des barres de progression et des messages d'état clairs pour chaque étape et chaque révision traitée.
+*   L'utilisateur est informé en temps réel des erreurs spécifiques rencontrées lors de la récupération des données de révision, ce qui facilite le diagnostic et améliore la transparence du processus.
+*   La navigation dans l'application est plus propre grâce à la suppression du raccourci 'App' non pertinent dans la barre latérale.
+
+**⚙️ Vue Technique** :
+*   **Correction de Bug (Visibilité Raccourci 'App')** :
+    *   Suppression des appels `st.markdown` qui affichaient le CSS personnalisé et l'en-tête de l'application directement dans `app.py`. Cela permet à `app.py` d'agir uniquement comme un fichier de configuration global, empêchant son apparition indésirable dans la barre latérale de Streamlit.
+*   **Amélioration (Barre de Progression et Feedback - `pages/1_⚙️_Configuration.py`)** :
+    *   Implémentation d'une barre de progression imbriquée dans la section de mise en cache des révisions. Une barre `overall_progress_bar` affiche la progression globale des profils, et une `rev_progress_bar` dédiée suit le traitement des révisions au sein de chaque profil.
+    *   Le placeholder `status_text_placeholder` a été affiné pour fournir des mises à jour dynamiques et granulaires, indiquant le profil et la révision en cours de traitement.
+    *   La gestion des erreurs a été améliorée avec des messages `st.success`, `st.info`, `st.warning`, et `st.error` affichés via `status_text_placeholder` pour chaque étape de récupération de révision, offrant un feedback immédiat sur le succès ou l'échec d'une opération spécifique.
+
+**Dette Technique Restante** :
+*   Ajouter des tests unitaires pour le `TealiumClient`, les `services` et les fonctions `database`.
+*   Explorer l'utilisation de `st.session_state.page` si une navigation plus complexe est requise au-delà de la navigation par fichier de Streamlit.
+*   Revoir la possibilité d'utiliser `st.data_editor` avec `ButtonColumn` si l'environnement Streamlit de l'utilisateur est mis à jour à une version plus récente et stable.

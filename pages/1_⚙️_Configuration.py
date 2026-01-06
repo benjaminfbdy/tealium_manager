@@ -171,39 +171,45 @@ if 'client' in st.session_state and st.session_state.client:
             st.stop()
 
         st.info(f"Début de la mise en cache pour {len(selected_profiles)} profil(s)...")
-        overall_progress_bar = st.progress(0)
-        status_text = st.empty()
+        overall_progress_bar = st.progress(0, text="Progression générale des profils...") # Initial text for overall bar
+        status_text_placeholder = st.empty() # Placeholder for current task description
         
         total_revisions_cached = 0
         total_profiles_processed = 0
 
         for idx, (account, profile) in enumerate(selected_profiles):
-            status_text.text(f"Traitement du profil : {account}/{profile} ({idx+1}/{len(selected_profiles)})")
+            status_text_placeholder.text(f"Traitement du profil : {account}/{profile} ({idx+1}/{len(selected_profiles)})")
             
             try:
-                # Get already cached revision IDs for this profile
                 cached_revision_ids = database.get_cached_revision_ids(account, profile)
-                
-                # Fetch all revisions from Tealium API
                 all_revisions = client.get_revisions(account, profile)
                 
                 if not all_revisions:
-                    st.warning(f"Aucune révision trouvée pour {account}/{profile}.")
+                    status_text_placeholder.warning(f"Aucune révision trouvée pour {account}/{profile}.")
                     continue
 
                 new_revisions_to_cache_count = 0
                 revisions_to_save_data = []
 
-                # Filter for new revisions and fetch details
-                for rev_data in all_revisions:
-                    # Check if rev_data is a dict (expected) or a string (actual based on error)
+                # New: Progress bar for revisions within the current profile
+                rev_count = len(all_revisions)
+                if rev_count > 0:
+                    rev_progress_bar = st.progress(0, text=f"Révisions pour {account}/{profile}...")
+                else:
+                    rev_progress_bar = None # Handle case where all_revisions is empty but not caught by previous check
+
+                for rev_idx, rev_data in enumerate(all_revisions):
+                    current_task_description = f"Récupération de la révision {rev_idx + 1}/{rev_count} pour {account}/{profile} (ID: {rev_data.get('revision_id', 'N/A')})"
+                    status_text_placeholder.text(current_task_description) # Update current task
+
                     if isinstance(rev_data, dict):
                         rev_id = rev_data.get('revision_id')
-                    else: # Assume it's a string, which is the revision_id
+                    else:
                         rev_id = rev_data
+
                     if rev_id and rev_id not in cached_revision_ids:
                         new_revisions_to_cache_count += 1
-                        st.text(f"  - Récupération des détails pour la révision {rev_id}...")
+                        
                         rev_metadata = client.get_revision_details(account, profile, rev_id)
                         rev_configuration = client.get_revision_configuration(account, profile, rev_id)
                         
@@ -211,12 +217,21 @@ if 'client' in st.session_state and st.session_state.client:
                             combined_details = {**rev_metadata, **rev_configuration}
                             revisions_to_save_data.append((rev_id, account, profile, json.dumps(combined_details)))
                             total_revisions_cached += 1
+                            status_text_placeholder.success(f"{current_task_description} - Succès.")
                         else:
                             error_msg = f"Erreur lors de la récupération des détails/configuration de la révision {rev_id} pour {account}/{profile}. "
-                            if 'error' in rev_metadata: error_msg += f"Métadonnées: {rev_metadata['error']}. "
-                            if 'error' in rev_configuration: error_msg += f"Configuration: {rev_configuration['error']}. "
-                            st.error(error_msg)
+                            if rev_metadata and 'error' in rev_metadata: error_msg += f"Métadonnées: {rev_metadata['error']}. "
+                            if rev_configuration and 'error' in rev_configuration: error_msg += f"Configuration: {rev_configuration['error']}. "
+                            status_text_placeholder.error(f"{current_task_description} - {error_msg}")
+                    else:
+                        status_text_placeholder.info(f"{current_task_description} - Déjà en cache ou ID manquant.")
+                    
+                    if rev_progress_bar:
+                        rev_progress_bar.progress((rev_idx + 1) / rev_count)
                 
+                if rev_progress_bar:
+                    rev_progress_bar.empty() # Clear revision progress bar for current profile
+
                 if revisions_to_save_data:
                     database.save_revisions_details(revisions_to_save_data)
                     st.success(f"{new_revisions_to_cache_count} nouvelles révisions mises en cache pour {account}/{profile}.")
@@ -224,13 +239,13 @@ if 'client' in st.session_state and st.session_state.client:
                     st.info(f"Aucune nouvelle révision à mettre en cache pour {account}/{profile} (ou toutes déjà en cache).")
             
             except Exception as e:
-                st.error(f"Erreur lors de la mise en cache pour {account}/{profile}: {e}")
+                status_text_placeholder.error(f"Erreur critique lors de la mise en cache pour {account}/{profile}: {e}")
             
             total_profiles_processed += 1
             overall_progress_bar.progress((total_profiles_processed / len(selected_profiles)))
 
         overall_progress_bar.empty()
-        status_text.empty()
+        status_text_placeholder.empty()
         st.success(f"Mise en cache terminée ! Total de {total_revisions_cached} révisions nouvellement mises en cache.")
         st.balloons()
     

@@ -28,8 +28,10 @@ custom_css = """
     }
 </style>
 """
-st.markdown(custom_css, unsafe_allow_html=True)
-st.markdown('<div class="app-header">Tealium Manager</div>', unsafe_allow_html=True)
+
+# No direct rendering in app.py to prevent it from appearing in the sidebar.
+# Global styles are defined in custom_css and can be applied by individual pages
+# that include st.markdown('<div class="app-header">Tealium Manager</div>', unsafe_allow_html=True)
 
 
 # --- Initialisation au démarrage de l'app ---
