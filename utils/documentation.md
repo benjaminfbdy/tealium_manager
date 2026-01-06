@@ -75,3 +75,20 @@
 *   Ajouter des tests unitaires pour le `TealiumClient`, les `services` et les fonctions `database`.
 *   Explorer l'utilisation de `st.session_state.page` si une navigation plus complexe est requise au-delà de la navigation par fichier de Streamlit.
 *   Revoir la possibilité d'utiliser `st.data_editor` avec `ButtonColumn` si l'environnement Streamlit de l'utilisateur est mis à jour à une version plus récente et stable.
+
+## [Sprint 7] - Résolution de l'erreur `TypeError` sur `theme`
+
+**👔 Vue Métier** :
+*   L'application peut maintenant démarrer sans rencontrer de `TypeError` lié à la configuration du thème, garantissant une meilleure stabilité au lancement.
+*   L'expérience utilisateur reste agréable, avec un thème par défaut clair de Streamlit et la charte graphique de l'en-tête de l'application.
+
+**⚙️ Vue Technique** :
+*   **Correction de Bug (`app.py`)** :
+    *   Suppression de l'argument `theme="light"` de l'appel `st.set_page_config` dans `app.py`. Cet argument n'est pas supporté par les versions plus anciennes de Streamlit, ce qui provoquait un `TypeError`.
+    *   **Note sur la compatibilité**: Pour utiliser nativement l'argument `theme` dans `st.set_page_config`, une mise à jour de Streamlit vers la version 1.16.0 ou ultérieure est nécessaire.
+    *   Si l'utilisateur souhaite définir un thème spécifiquement "light" sans mettre à jour Streamlit, il peut le faire via le fichier de configuration `.streamlit/config.toml` (par exemple, en ajoutant `[theme] primaryColor="#F63366" backgroundColor="#FFFFFF" secondaryBackgroundColor="#F0F2F6" textColor="#262730" font="sans serif"`).
+
+**Dette Technique Restante** :
+*   Ajouter des tests unitaires pour le `TealiumClient`, les `services` et les fonctions `database`.
+*   Explorer l'utilisation de `st.session_state.page` si une navigation plus complexe est requise au-delà de la navigation par fichier de Streamlit.
+*   Revoir la possibilité d'utiliser `st.data_editor` avec `ButtonColumn` si l'environnement Streamlit de l'utilisateur est mis à jour à une version plus récente et stable.

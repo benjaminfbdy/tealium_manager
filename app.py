@@ -9,8 +9,7 @@ st.set_page_config(
     layout="wide",
     page_title="Tealium Manager",
     page_icon="✨",
-    initial_sidebar_state="expanded",
-    theme="light"
+    initial_sidebar_state="expanded"
 )
 
 custom_css = """
