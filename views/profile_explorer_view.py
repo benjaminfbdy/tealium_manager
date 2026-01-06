@@ -1,6 +1,7 @@
 import streamlit as st
 from typing import Dict, List, Any
 from utils.data_processing import resolve_uids_in_component
+from views.component_renderers import render_load_rule, render_tag, render_variable, render_extension
 
 def render_profile_explorer(data_package: Dict[str, Any]):
     """
@@ -40,23 +41,31 @@ def render_profile_explorer(data_package: Dict[str, Any]):
                 st.write(components)
             else:
                 for component in components:
-                    with st.container():
-                        st.subheader(f"{display_name.rstrip('s')} : {component.get('name', component.get('alias', 'N/A'))}")
+                    component_title = component.get('name', component.get('alias', 'N/A'))
+                    with st.expander(f"**{component_title}**"):
                         
-                        resolved_component = resolve_uids_in_component(component, uid_map)
-
-                        details_cols = st.columns(2)
-                        col_index = 0
-                        for field, value in resolved_component.items():
-                            if value is None or value == [] or value == {} or field in ['id', 'name', 'alias']:
-                                continue
-                            
-                            with details_cols[col_index % 2]:
-                                st.markdown(f"**{field.replace('_', ' ').capitalize()}**")
-                                if isinstance(value, (dict, list)):
-                                    st.json(value, expanded=False)
-                                else:
-                                    st.write(str(value))
-                            col_index += 1
-                        st.markdown("---")
-
+                        # --- Dispatcher for custom renderers ---
+                        if display_name == "Load Rules":
+                            render_load_rule(component)
+                        elif display_name == "Tags":
+                            render_tag(component, uid_map)
+                        elif display_name == "Variables":
+                            render_variable(component, uid_map)
+                        elif display_name == "Extensions":
+                            render_extension(component)
+                        else:
+                            # Generic fallback renderer
+                            resolved_component = resolve_uids_in_component(component, uid_map)
+                            details_cols = st.columns(2)
+                            col_index = 0
+                            for field, value in resolved_component.items():
+                                if value is None or value == [] or value == {} or field in ['id', 'name', 'alias', 'notes']:
+                                    continue
+                                
+                                with details_cols[col_index % 2]:
+                                    st.markdown(f"**{field.replace('_', ' ').capitalize()}**")
+                                    if isinstance(value, (dict, list)):
+                                        st.json(value, expanded=False)
+                                    else:
+                                        st.write(str(value))
+                                col_index += 1

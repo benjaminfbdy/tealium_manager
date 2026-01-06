@@ -30,6 +30,9 @@ st.markdown("""
     /* Remove Streamlit's default header and top margin */
     header {visibility: hidden;}
     .stApp { margin-top: -80px; }
+    .block-container {
+        padding-top: 0rem;
+    }
 
     /* Sidebar */
     [data-testid="stSidebar"] {
@@ -63,11 +66,13 @@ st.markdown("""
     .app-header {
         background-color: #118aaf;
         color: white;
-        padding: 2rem 1rem;
-        border-radius: 0.5rem;
+        padding: 4rem 2rem; /* Increased padding */
+        border-radius: 0;
         margin-bottom: 1rem;
         font-size: 2.5rem;
         font-weight: bold;
+        margin-left: -1rem;
+        margin-right: -1rem;
     }
 
     /* Main font color */
@@ -82,7 +87,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- Header ---
-st.markdown('<p class="app-header">Bienvenue dans Tealium Manager</p>', unsafe_allow_html=True)
+st.markdown('<p class="app-header"></p>', unsafe_allow_html=True)
 
 
 # --- Sidebar Navigation ---

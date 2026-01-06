@@ -1,3 +1,5 @@
+import copy
+import json
 from typing import Dict, Any, List
 
 def build_uid_to_name_map(profile_data: Dict[str, Any]) -> Dict[int, Dict[str, str]]:
@@ -40,31 +42,7 @@ def build_uid_to_name_map(profile_data: Dict[str, Any]) -> Dict[int, Dict[str, s
 
     return uid_map
 
-import copy
-from typing import Dict, Any, List
 
-def build_uid_to_name_map(profile_data: Dict[str, Any]) -> Dict[int, Dict[str, str]]:
-    """
-    Builds a map from component UID to its name and type for easy lookup.
-    """
-    uid_map = {}
-    component_types = {
-        "variables": "Variable", "loadRules": "Load Rule", "extensions": "Extension",
-        "tags": "Tag", "events": "Event"
-    }
-
-    for key, component_type_name in component_types.items():
-        components = profile_data.get(key)
-        if isinstance(components, list):
-            for component in components:
-                uid = component.get("id")
-                name = component.get("name") or component.get("alias")
-                if uid:
-                    try:
-                        uid_map[int(uid)] = {"name": name or f"Untitled", "type": component_type_name}
-                    except (ValueError, TypeError):
-                        print(f"Warning: Could not process UID '{uid}' for a {component_type_name}.")
-    return uid_map
 
 def _resolve_recursive(data: Any, uid_map: Dict[int, Dict[str, str]]) -> Any:
     """Helper function to recursively traverse and resolve UIDs."""
@@ -140,12 +118,11 @@ def resolve_uids_in_component(component: Dict[str, Any], uid_map: Dict[int, Dict
     return resolved_component
 
 def _normalize_for_diff(data):
-    """Recursively sorts lists to make comparison order-independent."""
+    """Recursively sorts lists and dictionary keys to make comparison order-independent."""
     if isinstance(data, dict):
-        return {k: _normalize_for_diff(v) for k, v in data.items()}
+        return {k: _normalize_for_diff(v) for k, v in sorted(data.items())}
     if isinstance(data, list):
-        # We can only sort lists of simple, sortable types, or dicts if we define a rule.
-        # A simple but effective way is to convert them to strings and sort.
+        # For lists of dicts, we need a stable sorting key. str() is a decent heuristic.
         try:
             return sorted([_normalize_for_diff(x) for x in data], key=str)
         except TypeError:
@@ -162,16 +139,16 @@ def are_semantically_equal(comp1: Dict, comp2: Dict) -> bool:
     c2 = copy.deepcopy(comp2)
 
     # List of keys to ignore during comparison (e.g., internal versioning)
-    keys_to_ignore = ["version", "minorVersion", "_rev"]
+    keys_to_ignore = ["version", "minorVersion", "_rev", "environmentVersions"]
     for key in keys_to_ignore:
         c1.pop(key, None)
         c2.pop(key, None)
         
-    # Normalize by sorting all lists recursively
+    # Normalize by sorting all lists and dict keys recursively
     normalized_c1 = _normalize_for_diff(c1)
     normalized_c2 = _normalize_for_diff(c2)
 
-    return str(normalized_c1) == str(normalized_c2)
+    return normalized_c1 == normalized_c2
 
 def diff_revisions(rev1: Dict[str, Any], rev2: Dict[str, Any]) -> Dict[str, Dict[str, List]]:
     """
@@ -200,4 +177,6 @@ def diff_revisions(rev1: Dict[str, Any], rev2: Dict[str, Any]) -> Dict[str, Dict
                 if not are_semantically_equal(item1, item2):
                     diff_results[key]["modified"].append({"before": item1, "after": item2})
     
+    print("DEBUG: Final diff object being returned:")
+    print(json.dumps(diff_results, indent=2))
     return diff_results

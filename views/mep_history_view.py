@@ -27,27 +27,28 @@ def render_mep_history(revisions_data: List[Dict[str, Any]]):
     cols[4].write("**Date de MEP**")
     st.markdown("---")
 
-    # Create table rows
-    new_selection = []
-    for rev in revisions_data:
-        rev_id = rev.get("revision_id")
-        # Find the prod publish date
-        prod_publish_date = "N/A"
-        for pub in rev.get("publish_history", []):
-            if pub.get("environment") == "prod":
-                prod_publish_date = pd.to_datetime(pub.get('timestamp_iso')).strftime('%Y-%m-%d %H:%M')
-                break
+    # Create a scrollable container for the table rows
+    with st.container(height=500):
+        new_selection = []
+        for rev in revisions_data:
+            rev_id = rev.get("revision_id")
+            # Find the prod publish date
+            prod_publish_date = "N/A"
+            for pub in rev.get("publish_history", []):
+                if pub.get("environment") == "prod":
+                    prod_publish_date = pd.to_datetime(pub.get('timestamp_iso')).strftime('%Y-%m-%d %H:%M')
+                    break
 
-        cols = st.columns([1, 2, 3, 4, 2])
-        is_selected = cols[0].checkbox("", key=f"mep_{rev_id}", value=(rev_id in st.session_state.selected_meps))
-        
-        if is_selected:
-            new_selection.append(rev_id)
-        
-        cols[1].markdown(f"`{rev_id}`")
-        cols[2].text(rev.get("comment", "N/A"))
-        cols[3].text(rev.get("created_by", "N/A"))
-        cols[4].text(prod_publish_date)
+            cols = st.columns([1, 2, 3, 4, 2])
+            is_selected = cols[0].checkbox("", key=f"mep_{rev_id}", value=(rev_id in st.session_state.selected_meps))
+            
+            if is_selected:
+                new_selection.append(rev_id)
+            
+            cols[1].markdown(f"`{rev_id}`")
+            cols[2].text(rev.get("comment", "N/A"))
+            cols[3].text(rev.get("created_by", "N/A"))
+            cols[4].text(prod_publish_date)
 
     # Update session state if it has changed
     if sorted(new_selection) != sorted(st.session_state.selected_meps):
