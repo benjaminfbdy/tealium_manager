@@ -7,30 +7,14 @@ from tealium_api.client import TealiumClient
 # --- Page Configuration and Styling ---
 st.set_page_config(
     layout="wide",
-    page_title="Tealium Manager", # Changed to general title
-    page_icon="✨" # Changed to general icon
+    page_title="Tealium Manager",
+    page_icon="✨",
+    initial_sidebar_state="expanded",
+    theme="light"
 )
 
 custom_css = """
 <style>
-    /* Sidebar styling */
-    [data-testid="stSidebar"] > div:first-child {
-        background-color: #051838;
-    }
-    /* Set all text within the sidebar to white */
-    [data-testid="stSidebar"] * {
-        color: white;
-    }
-
-    /* Main content font color */
-    .main .block-container {
-        color: #545f70;
-    }
-    
-    p, ol, ul, li {
-        color: #545f70;
-    }
-
     /* Header styling */
     .app-header {
         background-color: #118aaf;

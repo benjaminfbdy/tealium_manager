@@ -4,41 +4,7 @@ import re
 from services import comparison_service
 
 # --- Page Configuration and Styling (Removed set_page_config) ---
-custom_css = """
-<style>
-    /* Sidebar styling */
-    [data-testid="stSidebar"] > div:first-child {
-        background-color: #051838;
-    }
-    /* Set all text within the sidebar to white */
-    [data-testid="stSidebar"] * {
-        color: white;
-    }
 
-    /* Main content font color */
-    .main .block-container {
-        color: #545f70;
-    }
-    
-    p, ol, ul, li {
-        color: #545f70;
-    }
-
-    /* Header styling */
-    .app-header {
-        background-color: #118aaf;
-        color: white;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin-bottom: 1rem;
-        text-align: center;
-        font-size: 24px;
-        font-weight: bold;
-    }
-</style>
-"""
-st.markdown(custom_css, unsafe_allow_html=True)
-st.markdown('<div class="app-header">Tealium Manager</div>', unsafe_allow_html=True)
 
 # --- UI Helper Functions ---
 
@@ -64,7 +30,9 @@ def display_changes(change_type, changes_dict, cfg_a, cfg_b):
     st.markdown(f"#### {titles.get(change_type, change_type)}")
 
     if change_type in ['dictionary_item_added', 'dictionary_item_removed']:
+        for path in changes_dict:
             match = re.findall(r"\[(?:'([^']+)'|(\d+))\]", path)
+            cleaned_matches = [m[0] or m[1] for m in match]
 
             if not cleaned_matches or len(cleaned_matches) < 1:
                 st.warning(f"Impossible de traiter le chemin : `{path}`")
@@ -79,7 +47,10 @@ def display_changes(change_type, changes_dict, cfg_a, cfg_b):
             name = item_data.get('name', f"ID: {item_id}") if item_data else f"ID: {item_id}"
             st.markdown(f"**{item_type.rstrip('s').capitalize()} : {name}**")
             st.json(item_data)
+    else:
+        for path, value in changes_dict.items():
             match = re.findall(r"\[(?:'([^']+)'|(\d+))\]", path)
+            cleaned_matches = [m[0] or m[1] for m in match]
 
             if not cleaned_matches or len(cleaned_matches) < 2:
                 st.write(f"Chemin non reconnu: `{path}`")

@@ -33,3 +33,25 @@
 *   Ajouter des tests unitaires pour le `TealiumClient`, les `services` et les fonctions `database`.
 *   Explorer l'utilisation de `st.session_state.page` si une navigation plus complexe est requise au-delà de la navigation par fichier de Streamlit.
 *   Revoir la possibilité d'utiliser `st.data_editor` avec `ButtonColumn` si l'environnement Streamlit de l'utilisateur est mis à jour à une version plus récente et stable.
+
+## [Sprint 5] - Améliorations de l'interface utilisateur et de l'expérience de navigation
+
+**👔 Vue Métier** :
+*   L'application est désormais plus intuitive grâce à l'affichage cohérent du thème lumineux par défaut de Streamlit, tout en conservant l'identité visuelle de l'entreprise.
+*   La navigation a été optimisée en définissant la page "Historique des MEP" comme page d'accueil par défaut, réduisant les clics et améliorant l'accès aux informations clés.
+*   La section de configuration des profils est désormais toujours accessible, même si aucun compte n'est trouvé via l'API, permettant une configuration manuelle plus flexible.
+
+**⚙️ Vue Technique** :
+*   **Correction de Bug (Accès Configuration Manuelle - `pages/1_⚙️_Configuration.py`)** :
+    *   Correction de la logique de conditionnement de l'affichage de la section de configuration manuelle des profils. La variable `st.session_state.client` est maintenant toujours initialisée après une tentative de connexion réussie, même si l'API ne retourne aucun compte, garantissant l'accès aux sections de configuration suivantes.
+*   **Amélioration (Homepage de l'application)** :
+    *   Le fichier `pages/0_🕰️_Historique.py` a été renommé en `pages/🏠_Historique.py` pour être automatiquement reconnu comme la page d'accueil par Streamlit.
+*   **Amélioration (Thème et Charte Graphique)** :
+    *   Le thème global de l'application est maintenant défini sur "light" via `st.set_page_config(theme="light")` dans `app.py`.
+    *   Le bloc de style CSS personnalisé (`custom_css`) a été centralisé dans `app.py` pour inclure uniquement le style de l'en-tête de l'application (`.app-header`).
+    *   Les blocs `custom_css` et les appels `st.markdown` correspondants ont été supprimés de toutes les pages individuelles (`pages/🏠_Historique.py`, `pages/1_⚙️_Configuration.py`, `pages/2_🔎_Exploration.py`, `pages/3_🔄_Comparaison.py`) afin d'éviter les redondances et de permettre au thème global de Streamlit de gérer le style du corps et de la sidebar.
+
+**Dette Technique Restante** :
+*   Ajouter des tests unitaires pour le `TealiumClient`, les `services` et les fonctions `database`.
+*   Explorer l'utilisation de `st.session_state.page` si une navigation plus complexe est requise au-delà de la navigation par fichier de Streamlit.
+*   Revoir la possibilité d'utiliser `st.data_editor` avec `ButtonColumn` si l'environnement Streamlit de l'utilisateur est mis à jour à une version plus récente et stable.

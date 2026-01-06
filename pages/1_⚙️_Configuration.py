@@ -8,41 +8,7 @@ import json # Added to ensure json is imported for json.dumps
 
 
 # --- Page Configuration and Styling (Removed set_page_config) ---
-custom_css = """
-<style>
-    /* Sidebar styling */
-    [data-testid="stSidebar"] > div:first-child {
-        background-color: #051838;
-    }
-    /* Set all text within the sidebar to white */
-    [data-testid="stSidebar"] * {
-        color: white;
-    }
 
-    /* Main content font color */
-    .main .block-container {
-        color: #545f70;
-    }
-    
-    p, ol, ul, li {
-        color: #545f70;
-    }
-
-    /* Header styling */
-    .app-header {
-        background-color: #118aaf;
-        color: white;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin-bottom: 1rem;
-        text-align: center;
-        font-size: 24px;
-        font-weight: bold;
-    }
-</style>
-"""
-st.markdown(custom_css, unsafe_allow_html=True)
-st.markdown('<div class="app-header">Tealium Manager</div>', unsafe_allow_html=True)
 
 
 st.title("⚙️ Configuration")
@@ -69,9 +35,9 @@ if st.button("Sauvegarder et Tester la connexion"):
                 encrypted_key = security.encrypt_data(api_key_input, security.load_key())
                 database.save_setting("encrypted_api_key", encrypted_key)
                 
-                st.session_state.client = client
             else:
                 st.error("Connexion établie mais aucun compte trouvé.")
+            st.session_state.client = client # Set client even if no accounts found
         except Exception as e:
             st.error(f"Erreur de connexion : {e}")
     else:
