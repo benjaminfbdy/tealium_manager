@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 from controllers.config_controller import get_all_configurations
-from utils.tealium_client import TealiumClient
+from database import get_cached_profile
 
 def render_inventory_view():
     st.header("🔬 Inventaire des Composants")
@@ -10,94 +10,98 @@ def render_inventory_view():
     # 1. Profile Selection
     try:
         configurations = get_all_configurations()
-        profile_options = {f"{p['account']}/{p['profile']}": p for p in configurations}
-        selected_profiles_keys = st.multiselect(
+        if not configurations:
+            st.warning("Aucune configuration de profil n'a été trouvée. Veuillez en ajouter via la page 'Configuration'.")
+            return
+            
+        profile_options = {f"{p['account']}/{p['profile']} ({p['name']})": p['name'] for p in configurations}
+        selected_profile_display_keys = st.multiselect(
             "Sélectionnez les profils à analyser",
             options=list(profile_options.keys()),
         )
-    except FileNotFoundError:
-        st.warning("Le fichier de configuration des profils n'a pas été trouvé. Veuillez d'abord configurer vos profils.")
-        return
+        selected_config_names = [profile_options[key] for key in selected_profile_display_keys]
+
     except Exception as e:
         st.error(f"Une erreur est survenue lors du chargement des profils : {e}")
         return
 
-    # 2. Keyword Input
-    keywords_input = st.text_input(
-        "Entrez des mots-clés à rechercher (séparés par des virgules)",
-        help="Exemple: adobe analytics, at internet, facebook"
-    )
+    col1, col2 = st.columns(2)
+    with col1:
+        component_types = st.multiselect(
+            "Types de composants",
+            options=["Tags", "Extensions", "Load Rules", "Variables"],
+            default=["Tags", "Extensions"]
+        )
+    with col2:
+        keywords_input = st.text_input(
+            "Mots-clés (séparés par des virgules)",
+            help="Exemple: adobe, facebook"
+        )
 
-    # 3. Crawl Button
     if st.button("Lancer l'inventaire"):
-        if not selected_profiles_keys:
+        if not selected_config_names:
             st.warning("Veuillez sélectionner au moins un profil.")
-        elif not keywords_input:
+            return
+        if not keywords_input:
             st.warning("Veuillez entrer au moins un mot-clé.")
+            return
+        if not component_types:
+            st.warning("Veuillez sélectionner au moins un type de composant.")
+            return
+
+        keywords = [k.strip().lower() for k in keywords_input.split(',')]
+        
+        inventory_data = []
+        profiles_to_download = []
+        progress_bar = st.progress(0)
+        total_steps = len(selected_config_names)
+        
+        with st.spinner("Analyse des profils..."):
+            for i, config_name in enumerate(selected_config_names):
+                full_profile_data = get_cached_profile(config_name)
+                
+                if not full_profile_data:
+                    profiles_to_download.append(config_name)
+                    continue
+
+                # Find the display key for the current config name to show in the table
+                profile_details = next((key for key, name in profile_options.items() if name == config_name), config_name)
+
+                for keyword in keywords:
+                    # Search in Tags
+                    if "Tags" in component_types and 'tags' in full_profile_data:
+                        for uid, item in full_profile_data['tags'].items():
+                            if keyword in item.get('name', '').lower():
+                                inventory_data.append({"Profil": profile_details, "Composant": "Tag", "Nom": item.get('name'), "UID": uid, "Statut": item.get('status'), "Type": item.get('type')})
+                    # Search in Extensions
+                    if "Extensions" in component_types and 'extensions' in full_profile_data:
+                        for uid, item in full_profile_data['extensions'].items():
+                            if keyword in item.get('name', '').lower():
+                                inventory_data.append({"Profil": profile_details, "Composant": "Extension", "Nom": item.get('name'), "UID": uid, "Statut": item.get('status'), "Scope": item.get('scope')})
+                    # Search in Load Rules
+                    if "Load Rules" in component_types and 'loadRules' in full_profile_data:
+                        for uid, item in full_profile_data['loadRules'].items():
+                            if keyword in item.get('name', '').lower():
+                                inventory_data.append({"Profil": profile_details, "Composant": "Load Rule", "Nom": item.get('name'), "UID": uid, "Statut": item.get('status')})
+                    # Search in Variables
+                    if "Variables" in component_types and 'variables' in full_profile_data:
+                        for uid, item in full_profile_data['variables'].items():
+                            if keyword in item.get('name', '').lower():
+                                inventory_data.append({"Profil": profile_details, "Composant": "Variable", "Nom": item.get('name'), "UID": uid, "Type": item.get('type')})
+                
+                progress_bar.progress((i + 1) / total_steps)
+
+        if profiles_to_download:
+            st.warning("Certains profils n'ont pas de données en cache. Veuillez les télécharger depuis la page 'Configuration'.")
+            for name in profiles_to_download:
+                st.write(f"- {name}")
+
+        if inventory_data:
+            st.success(f"{len(inventory_data)} composants trouvés !")
+            df = pd.DataFrame(inventory_data)
+            all_cols = ["Profil", "Composant", "Nom", "UID", "Statut", "Type", "Scope"]
+            df_cols = [col for col in all_cols if col in df.columns]
+            st.dataframe(df[df_cols])
         else:
-            keywords = [k.strip().lower() for k in keywords_input.split(',')]
-            selected_profiles = [profile_options[key] for key in selected_profiles_keys]
-            
-            with st.spinner("Analyse des profils en cours..."):
-                inventory_data = []
-                progress_bar = st.progress(0)
-                total_profiles = len(selected_profiles)
-
-                for i, profile_config in enumerate(selected_profiles):
-                    try:
-                        client = TealiumClient(profile_config)
-                        profile_details = f"{profile_config['account']}/{profile_config['profile']}"
-                        
-                        # Fetch latest version
-                        revision_list = client.get_revisions()
-                        if not revision_list:
-                            st.warning(f"Aucune révision trouvée pour {profile_details}.")
-                            continue
-                        
-                        latest_revision = revision_list[0] 
-                        full_profile_data = client.get_profile(latest_revision['id'])
-
-                        # Search for components
-                        for keyword in keywords:
-                            # Search in Tags
-                            if 'tags' in full_profile_data:
-                                for uid, tag in full_profile_data['tags'].items():
-                                    if keyword in tag.get('name', '').lower():
-                                        inventory_data.append({
-                                            "Profil": profile_details,
-                                            "Composant": "Tag",
-                                            "Nom": tag.get('name'),
-                                            "UID": uid,
-                                            "Statut": tag.get('status'),
-                                            "Type": tag.get('type')
-                                        })
-                            
-                            # Search in Extensions
-                            if 'extensions' in full_profile_data:
-                                for uid, ext in full_profile_data['extensions'].items():
-                                    if keyword in ext.get('name', '').lower():
-                                        inventory_data.append({
-                                            "Profil": profile_details,
-                                            "Composant": "Extension",
-                                            "Nom": ext.get('name'),
-                                            "UID": uid,
-                                            "Statut": ext.get('status'),
-                                            "Scope": ext.get('scope')
-                                        })
-
-                    except Exception as e:
-                        st.error(f"Erreur lors de l'analyse du profil {profile_config.get('account')}/{profile_config.get('profile')}: {e}")
-
-                    progress_bar.progress((i + 1) / total_profiles)
-
-            if inventory_data:
-                st.success(f"{len(inventory_data)} composants trouvés !")
-                df = pd.DataFrame(inventory_data)
-                
-                # Reorder columns for better readability
-                df = df[["Profil", "Composant", "Nom", "UID", "Statut", "Type", "Scope"]]
-                
-                st.dataframe(df)
-            else:
-                st.info("Aucun composant correspondant aux mots-clés n'a été trouvé dans les profils sélectionnés.")
+            st.info("Aucun composant correspondant n'a été trouvé dans les profils analysés.")
 

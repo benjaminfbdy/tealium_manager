@@ -1,140 +1,135 @@
 from utils.tealium_client import TealiumClient
 from database import (
     save_configuration, load_all_configurations, get_active_configuration, 
-    set_active_configuration, delete_configuration, get_db_status, reset_database
+    set_active_configuration, delete_configuration, get_db_status, reset_database,
+    save_global_credentials, load_global_credentials, cache_profile_data
 )
 from typing import Dict, List, Optional
 
 def get_all_configurations() -> List[Dict[str, str]]:
-    """
-    Loads all Tealium configurations from the database.
-    """
+    """Loads all Tealium profile configurations from the database."""
     return load_all_configurations()
 
+def get_global_credentials() -> Dict[str, str]:
+    """Loads the global API key and email."""
+    return load_global_credentials()
+
 def get_active_configuration_details() -> Optional[Dict[str, str]]:
-    """
-    Loads the details of the active Tealium configuration.
-    """
+    """Loads the details of the active Tealium configuration, including global credentials."""
     return get_active_configuration()
 
-def get_tealium_connection_status(credentials: Optional[Dict[str, str]] = None) -> bool:
+def get_tealium_connection_status() -> bool:
     """
-    Attempts to initialize TealiumClient and authenticate.
-    If credentials are provided, uses them; otherwise, loads the active config from database/env.
+    Attempts to initialize TealiumClient with the active config and authenticate.
     Returns True if authentication is successful, False otherwise.
     """
     try:
-        if credentials:
-            client = TealiumClient(
-                account=credentials.get("account"),
-                profile=credentials.get("profile"),
-                api_key=credentials.get("api_key"),
-                email=credentials.get("email")
-            )
-        else:
-            # If no specific credentials provided, try to use the active one
-            active_config = get_active_configuration()
-            if active_config:
-                client = TealiumClient(
-                    account=active_config.get("account"),
-                    profile=active_config.get("profile"),
-                    api_key=active_config.get("api_key"),
-                    email=active_config.get("email")
-                )
-            else:
-                # If no active config, client init might fail (ValueError), caught below
-                client = TealiumClient()
-        
-        client._authenticate_v2() # Attempt to authenticate
-        if client.token:
-            return True
-        else:
+        active_config = get_active_configuration()
+        if not active_config or not active_config.get("api_key"):
             return False
-    except ValueError as e:
-        print(f"Configuration Error: {e}")
-        return False
-    except Exception as e:
-        print(f"An unexpected error occurred during Tealium connection attempt: {e}")
+            
+        client = TealiumClient(
+            account=active_config.get("account"),
+            profile=active_config.get("profile"),
+            api_key=active_config.get("api_key"),
+            email=active_config.get("email")
+        )
+        client._authenticate_v2()
+        return bool(client.token_v2)
+    except (ValueError, Exception) as e:
+        print(f"An error occurred during Tealium connection attempt: {e}")
         return False
 
+def handle_save_global_credentials(creds: Dict[str, str]):
+    """Saves the global API key and email."""
+    save_global_credentials(creds.get("api_key", ""), creds.get("email", ""))
+
 def handle_add_new_config(config_data: Dict[str, str]) -> bool:
-    """
-    Saves a new configuration to the database and tests the connection.
-    Sets it as active if it's the first one, or if explicitly requested.
-    Returns True if the connection is successful, False otherwise.
-    """
+    """Saves a new profile configuration."""
     name = config_data.get("name")
     account = config_data.get("account")
     profile = config_data.get("profile")
-    api_key = config_data.get("api_key")
-    email = config_data.get("email")
 
-    if not all([name, account, profile, api_key, email]):
+    if not all([name, account, profile]):
         print("Error: All fields for new configuration must be provided.")
         return False
     
-    # Save (or update if name exists)
-    save_configuration(name, account, profile, api_key, email, is_active=False) # Initially not active
+    save_configuration(name, account, profile, is_active=False)
     
-    # If this is the only config, make it active
     all_configs = load_all_configurations()
     if len(all_configs) == 1:
         set_active_configuration(name)
-
-    return get_tealium_connection_status(config_data)
+    return True
 
 def handle_update_config(config_data: Dict[str, str]) -> bool:
-    """
-    Updates an existing configuration in the database and tests the connection.
-    Returns True if the connection is successful, False otherwise.
-    """
+    """Updates an existing profile configuration."""
     name = config_data.get("name")
     account = config_data.get("account")
     profile = config_data.get("profile")
-    api_key = config_data.get("api_key")
-    email = config_data.get("email")
-    is_active = config_data.get("is_active", False) # Preserve active status
 
-    if not all([name, account, profile, api_key, email]):
-        print("Error: All fields for configuration update must be provided.")
+    if not all([name, account, profile]):
         return False
     
-    save_configuration(name, account, profile, api_key, email, is_active) # is_active from UI
-    return get_tealium_connection_status(config_data)
+    # We need the current active status to preserve it, which is not passed directly
+    # Re-loading the config to check its status before saving.
+    existing_configs = load_all_configurations()
+    is_active = next((cfg.get("is_active", False) for cfg in existing_configs if cfg["name"] == name), False)
+    
+    save_configuration(name, account, profile, is_active)
+    return True
 
 def handle_set_active_config(name: str) -> bool:
-    """
-    Sets a configuration as active and tests its connection.
-    Returns True if the connection is successful, False otherwise.
-    """
+    """Sets a configuration as active and tests its connection."""
     set_active_configuration(name)
-    # Load the newly active config's details to pass to get_tealium_connection_status
-    active_config = get_active_configuration()
-    if active_config and active_config["name"] == name:
-        return get_tealium_connection_status(active_config)
-    return False # Should not happen if set_active_configuration works
+    return get_tealium_connection_status()
 
 def handle_delete_config(name: str):
-    """
-    Deletes a configuration from the database.
-    """
+    """Deletes a configuration from the database."""
+    was_active = False
+    active_config = get_active_configuration_details()
+    if active_config and active_config.get("name") == name:
+        was_active = True
+
     delete_configuration(name)
-    # If the deleted config was active, deactivate it and potentially set another as active if only one remains
-    all_configs = load_all_configurations()
-    if not all_configs:
-        pass # No configs left
-    elif not get_active_configuration(): # If deleted config was active and no other is active
-        # Set the first remaining config as active
-        set_active_configuration(all_configs[0]["name"])
+    
+    if was_active:
+        all_configs = load_all_configurations()
+        if all_configs:
+            set_active_configuration(all_configs[0]["name"])
+
+def handle_download_profile(config_name: str) -> bool:
+    """Fetches the latest profile data and caches it."""
+    creds = load_global_credentials()
+    configs = load_all_configurations()
+    target_config = next((cfg for cfg in configs if cfg["name"] == config_name), None)
+
+    if not target_config or not creds.get("api_key"):
+        print(f"Error: Cannot download profile for '{config_name}'. Missing config or global credentials.")
+        return False
+        
+    try:
+        client = TealiumClient(
+            account=target_config["account"],
+            profile=target_config["profile"],
+            api_key=creds["api_key"],
+            email=creds["email"]
+        )
+        profile_data = client.get_profile_components()
+        if not profile_data.get("error"):
+            cache_profile_data(config_name, profile_data["data"])
+            print(f"Successfully downloaded and cached profile for '{config_name}'.")
+            return True
+        else:
+            print(f"Error downloading profile for '{config_name}': {profile_data.get('message')}")
+            return False
+    except Exception as e:
+        print(f"An unexpected error occurred during profile download for '{config_name}': {e}")
+        return False
 
 def get_database_status() -> Dict:
-    """
-    Retrieves the status of the database.
-    """
+    """Retrieves the status of the database."""
     return get_db_status()
 
 def handle_database_reset() -> bool:
-    """
-    Handles the request to reset the database.
-    """
+    """Handles the request to reset the database."""
     return reset_database()

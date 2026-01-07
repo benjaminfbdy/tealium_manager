@@ -29,3 +29,21 @@ This will start the Streamlit server, and you can access the application in your
     *   La recherche se limite actuellement au nom (`name`) des composants. Une recherche plus avancée pourrait inclure d'autres champs (par exemple, la configuration des extensions, les variables de mapping des tags).
     *   Les erreurs sont gérées profil par profil, mais une stratégie de "retry" plus robuste pourrait être envisagée pour les appels API.
     *   Les résultats sont affichés dans un tableau simple. Des fonctionnalités de filtrage avancé ou d'exportation pourraient être ajoutées.
+
+## [Sprint 3] - Refactoring & Feature Enhancement
+
+**👔 Vue Métier** :
+*   **Inventaire Amélioré**: L'utilisateur peut désormais filtrer sa recherche par type de composant (Tag, Extension, Load Rule, Variable), en plus des mots-clés, pour des recherches plus rapides et ciblées.
+*   **Configuration Simplifiée**: L'interface de configuration est plus claire. Les identifiants (clé API, email), qui sont souvent les mêmes pour tous les profils, sont maintenant gérés dans une section globale, évitant la répétition.
+*   **Performance Accrue**: Grâce à un système de cache, l'analyse des profils pour l'inventaire est quasi-instantanée après un premier "téléchargement". L'utilisateur n'attend plus les appels API à chaque recherche.
+
+**⚙️ Vue Technique** :
+*   **Architecture & Refactoring**:
+    *   **Configuration Globale**: La gestion des configurations a été revue. La base de données (`database.py`) sépare maintenant les identifiants globaux (`global_settings`) des configurations de profils (`configurations`). Cela simplifie l'ajout de nouveaux profils.
+    *   **Mise en Cache des Profils**: Une nouvelle table `profile_cache` a été ajoutée à la base de données. La vue de configuration permet de "télécharger" la dernière version d'un profil, qui est ensuite stockée localement.
+    *   **Dépendance au Cache**: La fonctionnalité d'inventaire (`inventory_view.py`) ne fait plus d'appels API directs. Elle utilise exclusivement les données du cache (`get_cached_profile`), ce qui la rend plus rapide et moins sujette aux erreurs réseau. Si un profil n'est pas en cache, l'utilisateur est invité à le télécharger.
+*   **Corrections de Bugs**:
+    *   L'erreur `AttributeError: 'TealiumClient' object has no attribute 'get_revisions'` a été corrigée en renommant la méthode `get_revision_ids` en `get_revisions` dans `tealium_client.py` pour plus de cohérence.
+*   **Dette Technique**:
+    *   Le cache n'a pas de mécanisme d'expiration automatique (TTL). L'utilisateur doit manuellement retélécharger un profil pour le mettre à jour. Une stratégie de rafraîchissement périodique pourrait être envisagée.
+    *   La gestion des erreurs de l'API Tealium lors du téléchargement pourrait être plus détaillée pour l'utilisateur.

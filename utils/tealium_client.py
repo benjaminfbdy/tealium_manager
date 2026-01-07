@@ -113,11 +113,11 @@ class TealiumClient:
         except requests.exceptions.RequestException as e:
             return {"error": True, "message": f"Request Error: {e}"}
 
-    def get_revision_ids(self) -> Optional[List[str]]:
+    def get_revisions(self) -> Optional[List[str]]:
         """Fetches a list of revision IDs for the active Tealium iQ profile using the V2 API."""
         headers = self._get_headers_v2()
         if not headers:
-            print("Error: Not authenticated (v2). Cannot fetch revision IDs.")
+            print("Error: Not authenticated (v2). Cannot fetch revisions.")
             return None
 
         url = f"{self.base_url_v2}/manifest/accounts/{self.account}/profiles/{self.profile}/revisions"
@@ -126,7 +126,7 @@ class TealiumClient:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            print(f"Error fetching revision IDs: {e}")
+            print(f"Error fetching revisions: {e}")
             if response is not None: print(f"Response body: {response.text}")
         return None
 

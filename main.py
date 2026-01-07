@@ -8,10 +8,13 @@ from controllers.config_controller import (
     get_tealium_connection_status,
     get_all_configurations,
     get_active_configuration_details,
+    get_global_credentials,
+    handle_save_global_credentials,
     handle_add_new_config,
     handle_update_config,
     handle_set_active_config,
     handle_delete_config,
+    handle_download_profile,
     get_database_status,
     handle_database_reset
 )
@@ -162,44 +165,50 @@ if st.session_state.page == "home":
 elif st.session_state.page == "config":
     st.subheader("Gestion des Configurations Tealium")
     
-    # Get all configurations and the active one
+    # Load all configurations, global credentials, and active config details
     all_configurations = get_all_configurations()
+    global_creds = get_global_credentials()
     active_config_details = get_active_configuration_details()
     active_config_name = active_config_details.get("name") if active_config_details else None
 
     # Determine connection status based on the active configuration
-    is_connected = False
-    if active_config_details:
-        with st.spinner(f"Vérification de la connexion pour '{active_config_name}'..."):
-            is_connected = get_tealium_connection_status(active_config_details)
+    is_connected = get_tealium_connection_status()
     
     # Render the config panel and capture user action
-    action_result = render_config_panel(is_connected, all_configurations, active_config_name)
+    action_result = render_config_panel(is_connected, all_configurations, active_config_name, global_creds)
 
     if action_result["action"]:
         action = action_result["action"]
         data = action_result["data"]
-
-        with st.spinner("Traitement de la requête..."):
-            if action == "add_new":
+        
+        with st.spinner("Traitement..."):
+            if action == "save_global":
+                handle_save_global_credentials(data)
+                st.success("Identifiants globaux enregistrés.")
+            elif action == "add_new":
                 if handle_add_new_config(data):
-                    st.success(f"Configuration '{data['name']}' ajoutée et testée avec succès.")
+                    st.success(f"Profil '{data['name']}' ajouté.")
                 else:
-                    st.error(f"Échec de l'ajout ou de la connexion pour '{data['name']}'.")
+                    st.error(f"Erreur lors de l'ajout du profil '{data['name']}'.")
             elif action == "update":
                 if handle_update_config(data):
-                    st.success(f"Configuration '{data['name']}' mise à jour et testée avec succès.")
-                else:
-                    st.error(f"Échec de la mise à jour ou de la connexion pour '{data['name']}'.")
+                    st.success(f"Profil '{data['name']}' mis à jour.")
             elif action == "set_active":
                 if handle_set_active_config(data["name"]):
-                    st.success(f"Configuration '{data['name']}' définie comme active et testée avec succès.")
+                    st.success(f"'{data['name']}' est maintenant le profil actif et la connexion est réussie.")
                 else:
-                    st.error(f"Échec de la définition comme active ou de la connexion pour '{data['name']}'.")
+                    st.error(f"'{data['name']}' a été défini comme actif, mais la connexion a échoué.")
             elif action == "delete":
                 handle_delete_config(data["name"])
-                st.success(f"Configuration '{data['name']}' supprimée.")
-        st.rerun() # Rerun to reflect updated list and status
+                st.success(f"Profil '{data['name']}' supprimé.")
+            elif action == "download":
+                if handle_download_profile(data["name"]):
+                    st.success(f"Les données du profil '{data['name']}' ont été téléchargées et mises en cache.")
+                else:
+                    st.error(f"Échec du téléchargement pour le profil '{data['name']}'.")
+        
+        st.rerun()
+
 elif st.session_state.page == "profile_explorer":
     st.subheader("Explorateur de Composants de Profil Tealium")
     active_config_details = get_active_configuration_details()
