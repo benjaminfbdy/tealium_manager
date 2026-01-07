@@ -3,6 +3,7 @@ from views.config_view import render_config_panel
 from views.profile_explorer_view import render_profile_explorer
 from views.mep_history_view import render_mep_history
 from views.comparison_view import render_comparison
+from views.inventory_view import render_inventory_view
 from controllers.config_controller import (
     get_tealium_connection_status,
     get_all_configurations,
@@ -103,9 +104,10 @@ if st.sidebar.button("Configuration"):
     st.session_state.page = "config"
 if st.sidebar.button("Explorateur de Profil"):
     st.session_state.page = "profile_explorer"
-if st.sidebar.button("Historique des MEP"): # New navigation button
+if st.sidebar.button("Historique des MEP"):
     st.session_state.page = "mep_history"
-# Add other navigation buttons here as features are added
+if st.sidebar.button("Inventaire"):
+    st.session_state.page = "inventory"
 
 
 # --- Database Management in Sidebar ---
@@ -265,7 +267,8 @@ elif st.session_state.page == "mep_history":
             render_mep_history(meps_data)
         else:
             st.info("Aucune MEP trouvée pour le profil actif.")
-
+elif st.session_state.page == "inventory":
+    render_inventory_view()
 elif st.session_state.page == "comparison":
     st.subheader("Comparaison de MEPs")
     if 'meps_to_compare' in st.session_state and len(st.session_state.meps_to_compare) == 2:
