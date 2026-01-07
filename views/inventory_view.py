@@ -90,9 +90,23 @@ def render_inventory_view():
 
                     for comp_type_label, comp_type_key in search_logic.items():
                         if comp_type_label in component_types:
-                            for uid, item in (full_profile_data.get(comp_type_key) or {}).items():
-                                item_name = item.get('name', '') if item else ''
+                            components = full_profile_data.get(comp_type_key)
+                            items_to_search = []
+                            
+                            if isinstance(components, dict):
+                                items_to_search = components.values()
+                            elif isinstance(components, list):
+                                items_to_search = components
+                            
+                            for item in items_to_search:
+                                # Ensure item is a dict and has a name
+                                if not isinstance(item, dict) or 'name' not in item:
+                                    continue
+
+                                item_name = item.get('name', '')
                                 if keyword.lower() in item_name.lower():
+                                    # UID can be 'id' or 'uid' depending on component type
+                                    uid = item.get('id', item.get('uid', 'N/A'))
                                     entry = {"Profil": profile_details, "Composant": comp_type_label, "Nom": item_name, "UID": uid}
                                     if 'status' in item: entry['Statut'] = item.get('status')
                                     if 'type' in item: entry['Type'] = item.get('type')
