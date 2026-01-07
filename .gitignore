@@ -149,6 +149,9 @@ cython_debug/
 *.db
 *.sqlite3
 
+# Application-specific settings
+settings.json
+
 # Tealium Manager Specific
 # Ignore user-specific context files
 utils/*.json
