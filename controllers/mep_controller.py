@@ -34,7 +34,7 @@ def get_meps_data() -> Optional[List[Dict]]:
     revision_ids = get_cached_data(revision_ids_cache_key, ttl=300)
     if not revision_ids:
         st.info("Fetching fresh revision list from API...")
-        revision_ids = client.get_revision_ids()
+        revision_ids = client.get_revisions()
         if revision_ids:
             set_cached_data(revision_ids_cache_key, revision_ids)
         else:

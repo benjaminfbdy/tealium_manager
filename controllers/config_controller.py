@@ -114,14 +114,22 @@ def handle_download_profile(config_name: str) -> bool:
             api_key=creds["api_key"],
             email=creds["email"]
         )
-        profile_data = client.get_profile_components()
-        if not profile_data.get("error"):
-            cache_profile_data(config_name, profile_data["data"])
+        profile_data_response = client.get_profile_components()
+        
+        if profile_data_response.get("error"):
+            print(f"Error downloading profile for '{config_name}': {profile_data_response.get('message')}")
+            return False
+
+        profile_data = profile_data_response.get("data")
+        # Check if the data is present and not empty
+        if profile_data:
+            cache_profile_data(config_name, profile_data)
             print(f"Successfully downloaded and cached profile for '{config_name}'.")
             return True
         else:
-            print(f"Error downloading profile for '{config_name}': {profile_data.get('message')}")
+            print(f"Error: Download for '{config_name}' resulted in empty data.")
             return False
+            
     except Exception as e:
         print(f"An unexpected error occurred during profile download for '{config_name}': {e}")
         return False
