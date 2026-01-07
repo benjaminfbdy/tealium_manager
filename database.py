@@ -177,14 +177,19 @@ def cache_profile_data(config_name: str, data: Dict):
     conn.commit()
     conn.close()
 
-def get_cached_profile(config_name: str) -> Optional[Dict]:
-    """Retrieves a cached LATEST profile by its configuration name."""
+def get_cached_profile(config_name: str) -> (Optional[Dict], Optional[float]):
+    """
+    Retrieves a cached LATEST profile and its timestamp by its configuration name.
+    Returns (data, timestamp) or (None, None).
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT data FROM profile_cache WHERE config_name = ?", (config_name,))
+    cursor.execute("SELECT data, timestamp FROM profile_cache WHERE config_name = ?", (config_name,))
     row = cursor.fetchone()
     conn.close()
-    return json.loads(row['data']) if row else None
+    if row:
+        return json.loads(row['data']), row['timestamp']
+    return None, None
 
 # --- DB Status and Maintenance ---
 
