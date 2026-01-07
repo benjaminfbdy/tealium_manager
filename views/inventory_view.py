@@ -68,25 +68,28 @@ def render_inventory_view():
                 profile_details = next((key for key, name in profile_options.items() if name == config_name), config_name)
 
                 for keyword in keywords:
-                    # Safely search in Tags
+                    # Safely search in Tags, handling missing keys and None values
                     if "Tags" in component_types:
-                        for uid, item in full_profile_data.get('tags', {}).items():
-                            if keyword in item.get('name', '').lower():
+                        for uid, item in (full_profile_data.get('tags') or {}).items():
+                            if item and keyword in item.get('name', '').lower():
                                 inventory_data.append({"Profil": profile_details, "Composant": "Tag", "Nom": item.get('name'), "UID": uid, "Statut": item.get('status'), "Type": item.get('type')})
+                    
                     # Safely search in Extensions
                     if "Extensions" in component_types:
-                        for uid, item in full_profile_data.get('extensions', {}).items():
-                            if keyword in item.get('name', '').lower():
+                        for uid, item in (full_profile_data.get('extensions') or {}).items():
+                            if item and keyword in item.get('name', '').lower():
                                 inventory_data.append({"Profil": profile_details, "Composant": "Extension", "Nom": item.get('name'), "UID": uid, "Statut": item.get('status'), "Scope": item.get('scope')})
+                    
                     # Safely search in Load Rules
                     if "Load Rules" in component_types:
-                        for uid, item in full_profile_data.get('loadRules', {}).items():
-                            if keyword in item.get('name', '').lower():
+                        for uid, item in (full_profile_data.get('loadRules') or {}).items():
+                            if item and keyword in item.get('name', '').lower():
                                 inventory_data.append({"Profil": profile_details, "Composant": "Load Rule", "Nom": item.get('name'), "UID": uid, "Statut": item.get('status')})
+                    
                     # Safely search in Variables
                     if "Variables" in component_types:
-                        for uid, item in full_profile_data.get('variables', {}).items():
-                            if keyword in item.get('name', '').lower():
+                        for uid, item in (full_profile_data.get('variables') or {}).items():
+                            if item and keyword in item.get('name', '').lower():
                                 inventory_data.append({"Profil": profile_details, "Composant": "Variable", "Nom": item.get('name'), "UID": uid, "Type": item.get('type')})
                 
                 progress_bar.progress((i + 1) / total_steps)
