@@ -1,5 +1,5 @@
 import pandas as pd
-from typing import Dict
+from typing import Dict, List
 
 def parse_target_mappings(df: pd.DataFrame) -> Dict[str, str]:
     """
