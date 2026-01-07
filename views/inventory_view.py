@@ -1,136 +1,129 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import json
 from controllers.config_controller import get_all_configurations
 from database import get_cached_profile
+from utils.settings import load_inventory_columns, save_inventory_columns
 
 def render_inventory_view():
     st.header("🔬 Inventaire des Composants")
     st.write("Cette fonctionnalité recherche des composants dans les données locales en cache. Assurez-vous d'avoir téléchargé les profils via la page 'Configuration'.")
     st.markdown("---")
 
-    # 1. Profile Selection
+    # --- Setup and Profile Selection ---
     try:
         configurations = get_all_configurations()
         if not configurations:
             st.warning("Aucune configuration de profil n'a été trouvée. Veuillez en ajouter une via la page 'Configuration'.")
             return
-            
         profile_options = {f"{p['account']}/{p['profile']} ({p['name']})": p['name'] for p in configurations}
-        selected_profile_display_keys = st.multiselect(
-            "Sélectionnez les profils à analyser",
-            options=list(profile_options.keys()),
-        )
+        selected_profile_display_keys = st.multiselect("Sélectionnez les profils à analyser", options=list(profile_options.keys()))
         selected_config_names = [profile_options[key] for key in selected_profile_display_keys]
-
     except Exception as e:
         st.error(f"Une erreur est survenue lors du chargement des profils : {e}")
         return
 
-    # Display cache status for selected profiles
+    # --- Display Cache Status ---
     if selected_config_names:
         st.subheader("Statut du Cache des Profils Sélectionnés")
         for config_name in selected_config_names:
             _, timestamp = get_cached_profile(config_name)
             display_name = next((key for key, name in profile_options.items() if name == config_name), config_name)
             if timestamp:
-                cache_time = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
-                st.success(f"✅ **{display_name}**: Mis en cache le {cache_time}")
+                st.success(f"✅ **{display_name}**: Mis en cache le {datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')}")
             else:
-                st.error(f"❌ **{display_name}**: Pas de données en cache. Veuillez le télécharger depuis la page 'Configuration'.")
+                st.error(f"❌ **{display_name}**: Pas de données en cache. Veuillez le télécharger.")
         st.markdown("---")
 
-
+    # --- Search Inputs ---
     col1, col2 = st.columns(2)
-    with col1:
-        component_types = st.multiselect(
-            "Types de composants",
-            options=["Tags", "Extensions", "Load Rules", "Variables"],
-            default=["Tags", "Extensions", "Load Rules", "Variables"]
-        )
-    with col2:
-        keywords_input = st.text_input(
-            "Mots-clés (séparés par des virgules, sensibles à la casse)",
-            help="Exemple: adobe, facebook"
-        )
+    component_types = col1.multiselect("Types de composants", options=["Tags", "Extensions", "Load Rules", "Variables"], default=["Tags", "Extensions", "Load Rules", "Variables"])
+    keywords_input = col2.text_input("Mots-clés (séparés par des virgules)", help="Exemple: adobe, facebook")
 
+    # --- Search Execution ---
     if st.button("Lancer l'inventaire"):
-        if not selected_config_names:
-            st.warning("Veuillez sélectionner au moins un profil.")
-            return
-        if not keywords_input:
-            st.warning("Veuillez entrer au moins un mot-clé.")
-            return
-        if not component_types:
-            st.warning("Veuillez sélectionner au moins un type de composant.")
+        if not selected_config_names or not keywords_input or not component_types:
+            st.warning("Veuillez sélectionner des profils, entrer des mots-clés et choisir des types de composants.")
             return
 
-        keywords = [k.strip() for k in keywords_input.split(',')]
-        
+        keywords = [k.strip().lower() for k in keywords_input.split(',') if k.strip()]
         inventory_data = []
         
         with st.spinner("Analyse des profils en cache..."):
+            # --- Data Gathering ---
             for config_name in selected_config_names:
-                full_profile_data, timestamp = get_cached_profile(config_name)
-                
-                if not full_profile_data:
-                    continue
-
+                full_profile_data, _ = get_cached_profile(config_name)
+                if not full_profile_data: continue
                 profile_details = next((key for key, name in profile_options.items() if name == config_name), config_name)
-
-                for keyword in keywords:
-                    if not keyword: continue
-                    
-                    search_logic = {
-                        "Tags": "tags",
-                        "Extensions": "extensions",
-                        "Load Rules": "loadRules",
-                        "Variables": "variables"
-                    }
-
-                    for comp_type_label, comp_type_key in search_logic.items():
-                        if comp_type_label in component_types:
-                            components = full_profile_data.get(comp_type_key)
-                            items_to_search = []
-                            
-                            if isinstance(components, dict):
-                                items_to_search = components.values()
-                            elif isinstance(components, list):
-                                items_to_search = components
-                            
-                            for item in items_to_search:
-                                # Ensure item is a dict and has a name
-                                if not isinstance(item, dict) or 'name' not in item:
-                                    continue
-
-                                item_name = item.get('name', '')
-                                if keyword.lower() in item_name.lower():
-                                    # UID can be 'id' or 'uid' depending on component type
-                                    uid = item.get('id', item.get('uid', 'N/A'))
-                                    entry = {
-                                        "Profil": profile_details, 
-                                        "Composant": comp_type_label, 
-                                        "Nom": item_name, 
-                                        "UID": uid,
-                                        "raw_data": item  # Add the raw item data here
-                                    }
-                                    if 'status' in item: entry['Statut'] = item.get('status')
-                                    if 'type' in item: entry['Type'] = item.get('type')
-                                    if 'scope' in item: entry['Scope'] = item.get('scope')
-                                    inventory_data.append(entry)
+                
+                search_logic = {"Tags": "tags", "Extensions": "extensions", "Load Rules": "loadRules", "Variables": "variables"}
+                for comp_type_label, comp_type_key in search_logic.items():
+                    if comp_type_label in component_types:
+                        components = full_profile_data.get(comp_type_key) or []
+                        items_to_search = components.values() if isinstance(components, dict) else components
+                        
+                        for item in items_to_search:
+                            if isinstance(item, dict) and 'name' in item:
+                                for keyword in keywords:
+                                    if keyword in item['name'].lower():
+                                        entry = item.copy() # Start with all raw data
+                                        entry['Profil'] = profile_details
+                                        entry['Type de Composant'] = comp_type_label
+                                        inventory_data.append(entry)
+                                        break # Avoid adding the same item multiple times if it matches multiple keywords
         
-        if inventory_data:
-            st.success(f"{len(inventory_data)} composants trouvés !")
-            
-            for item_found in inventory_data:
-                col1, col2, col3 = st.columns([3,2,1])
-                col1.write(f"**{item_found['Nom']}**")
-                col2.write(f"*{item_found['Profil']}*")
-                col3.write(f"`{item_found['Composant']}`")
+        # --- Store results in session state to persist across reruns for column selection ---
+        st.session_state['inventory_results'] = inventory_data
 
-                with st.expander("Voir les données brutes"):
-                    st.json(item_found["raw_data"])
-                st.markdown("---")
+    # --- Results Display ---
+    if 'inventory_results' in st.session_state and st.session_state.inventory_results:
+        results = st.session_state.inventory_results
+        st.success(f"{len(results)} composants trouvés !")
 
+        # --- Column Selection ---
+        all_possible_columns = set(['Profil', 'Type de Composant', 'name'])
+        for item in results:
+            all_possible_columns.update(item.keys())
+        
+        default_cols = ['Profil', 'Type de Composant', 'name', 'id', 'status', 'scope', 'variable', 'type']
+        
+        # Ensure default cols exist in the possible columns
+        valid_default_cols = [col for col in default_cols if col in all_possible_columns]
+        
+        # Load saved preferences or use defaults
+        saved_columns = load_inventory_columns(valid_default_cols)
+        # Ensure saved columns are still valid for the current result set
+        valid_saved_columns = [col for col in saved_columns if col in all_possible_columns]
+
+        with st.expander("Gérer les colonnes affichées"):
+            selected_columns = st.multiselect(
+                "Choisissez les colonnes",
+                options=sorted(list(all_possible_columns)),
+                default=valid_saved_columns
+            )
+            if selected_columns != valid_saved_columns:
+                save_inventory_columns(selected_columns)
+                # No rerun needed, just rebuild the dataframe below
+
+        # --- DataFrame Creation and Display ---
+        display_data = []
+        for item in results:
+            row = {}
+            for col in selected_columns:
+                value = item.get(col)
+                # Convert complex types to JSON string for display in a dataframe
+                if isinstance(value, (dict, list)):
+                    row[col] = json.dumps(value)
+                else:
+                    row[col] = value
+            display_data.append(row)
+        
+        if display_data:
+            df = pd.DataFrame(display_data)
+            st.dataframe(df)
         else:
-            st.info("Aucun composant correspondant n'a été trouvé dans les profils en cache avec les critères fournis.")
+            st.info("Sélectionnez des colonnes pour afficher les résultats.")
+
+    elif 'inventory_results' in st.session_state:
+        st.info("Aucun composant correspondant n'a été trouvé dans les profils en cache avec les critères fournis.")

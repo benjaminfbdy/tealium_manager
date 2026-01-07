@@ -60,7 +60,7 @@ def _render_mappings_table(mappings: List[Dict[str, Any]]):
 
 def render_tag(component: Dict[str, Any], uid_map: Dict[int, Dict[str, str]]):
     """
-    Renders a single Tag component in a user-friendly way.
+    Renders a single Tag component with detailed, business-friendly formatting.
     """
     st.caption(f"ID: {component.get('id')} | Status: {component.get('status')} | Vendor: {component.get('vendor')}")
     
@@ -68,26 +68,66 @@ def render_tag(component: Dict[str, Any], uid_map: Dict[int, Dict[str, str]]):
     if notes:
         st.markdown(f"> {notes}")
 
-    # Render Load Rules used by this tag
-    load_rule_ids = component.get("loadRuleIds", [])
-    st.subheader("Load Rules")
-    if load_rule_ids:
-        for uid in load_rule_ids:
-            name = uid_map.get(uid, {}).get('name', f"Unknown UID: {uid}")
-            st.text(f"- {name} (ID: {uid})")
-    else:
-        st.text("Always On (no load rules)")
+    col1, col2 = st.columns(2)
 
+    # --- Column 1: Rules and Targets ---
+    with col1:
+        # --- Load Rules ---
+        st.subheader(" déclenchement")
+        rules = component.get("rules", {})
+        apply_rules = rules.get("apply")
+        exclude_rules = rules.get("exclude")
+
+        if not apply_rules and not exclude_rules:
+             st.markdown("- **Load Rules**: `Always On`")
+        else:
+            if apply_rules:
+                # Assuming 'apply' follows the same structure as 'exclude'
+                # This part might need adjustment based on actual data structure for 'apply'
+                st.markdown("- **Load Rules (Inclusion)**:")
+                for rule_group in apply_rules:
+                    for rule_item in rule_group.get("or", []):
+                        uid = rule_item.get("uid")
+                        name = uid_map.get(uid, {}).get('name', f"Unknown UID: {uid}")
+                        st.markdown(f"  - `{name}`")
+            if exclude_rules:
+                st.markdown("- **Load Rules (Exclusion)**:")
+                for rule_group in exclude_rules:
+                    for rule_item in rule_group.get("or", []):
+                        uid = rule_item.get("uid")
+                        name = uid_map.get(uid, {}).get('name', f"Unknown UID: {uid}")
+                        st.markdown(f"  - `{name}`")
+        
+        # --- Selected Targets ---
+        st.subheader("Cibles")
+        targets = component.get("selectedTargets", {})
+        enabled_targets = [k.upper() for k, v in targets.items() if v is True]
+        if enabled_targets:
+            st.markdown(f"- **Environnements activés**: {', '.join(enabled_targets)}")
+        else:
+            st.markdown("- Aucun environnement activé.")
+
+    # --- Column 2: Advanced Config ---
+    with col2:
+        st.subheader("Configuration Avancée")
+        adv_config = component.get("advancedConfiguration", {})
+        if adv_config:
+            for key, value in adv_config.items():
+                st.markdown(f"- **{key.replace('_', ' ').capitalize()}**: `{value}`")
+        else:
+            st.text("Aucune configuration avancée.")
+
+    # --- Data Mappings (Full Width) ---
     st.subheader("Data Mappings")
     _render_mappings_table(component.get("dataMappings", []))
 
-    # Render Config
-    config = component.get("config")
-    if config:
-        st.subheader("Configuration")
-        st.json(config, expanded=False)
+    # --- Vendor Specific Configuration (Full Width) ---
+    vendor_config = component.get("configuration")
+    if vendor_config:
+        with st.expander("Voir la Configuration Spécifique au Tag (Adobe Analytics)"):
+            st.json(vendor_config)
 
-    with st.expander("Voir les données brutes"):
+    with st.expander("Voir les données brutes complètes"):
         st.json(component)
 
 # --- Variable Renderers ---
