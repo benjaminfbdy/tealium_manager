@@ -1,7 +1,7 @@
 
 import streamlit as st
 import pandas as pd
-from controllers.profile_controller import get_all_profiles
+from controllers.config_controller import get_all_configurations
 from utils.tealium_client import TealiumClient
 
 def render_inventory_view():
@@ -9,8 +9,8 @@ def render_inventory_view():
 
     # 1. Profile Selection
     try:
-        profiles = get_all_profiles()
-        profile_options = {f"{p['account']}/{p['profile']}": p for p in profiles}
+        configurations = get_all_configurations()
+        profile_options = {f"{p['account']}/{p['profile']}": p for p in configurations}
         selected_profiles_keys = st.multiselect(
             "Sélectionnez les profils à analyser",
             options=list(profile_options.keys()),
