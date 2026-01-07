@@ -23,53 +23,25 @@ def parse_target_mappings(df: pd.DataFrame) -> Dict[str, str]:
     return target_map
 
 def parse_eventstream_mappings(es_data: List[Dict[str, str]]) -> Dict[str, str]:
-
     """
-
     Parses mappings from an EventStream JSON data structure.
-
     
-
-    ASSUMPTION: The JSON is a list of dictionaries, where each dict has
-
-    a 'source' key (the technical UDO name) and a 'destination' key 
-
-    (the Adobe Analytics variable).
-
-    Example: [{"source": "page_name", "destination": "eVar50"}, ...]
-
+    The JSON is a list of dictionaries, where each dict has
+    a 'tealium_source' key (the technical UDO name) and an 'adobe_variable' key.
+    Example: [{"tealium_source": "datalayer.pages.pageName", "adobe_variable": "pageName"}, ...]
     """
-
     if not isinstance(es_data, list):
-
-        # This could be another format, e.g. a dict. For now, we raise an error.
-
-        # This can be improved if other formats are discovered.
-
         raise ValueError("Le format du JSON EventStream n'est pas reconnu. Une liste de mappings est attendue.")
 
-
-
     es_map = {}
-
     for mapping_item in es_data:
-
-        if isinstance(mapping_item, dict) and 'source' in mapping_item and 'destination' in mapping_item:
-
-            technical_name = mapping_item['source'].strip()
-
-            adobe_var = mapping_item['destination'].strip()
-
+        if isinstance(mapping_item, dict) and 'tealium_source' in mapping_item and 'adobe_variable' in mapping_item:
+            technical_name = mapping_item['tealium_source'].strip()
+            adobe_var = mapping_item['adobe_variable'].strip()
             es_map[technical_name] = adobe_var
-
         else:
-
-            # Handle cases where items in the list don't match the expected structure
-
             print(f"Warning: Ignored invalid item in EventStream JSON: {mapping_item}")
-
             
-
     return es_map
 
 
