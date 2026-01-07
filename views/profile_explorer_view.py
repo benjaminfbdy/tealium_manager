@@ -1,6 +1,6 @@
 import streamlit as st
 from typing import Dict, List, Any
-from utils.data_processing import resolve_uids_in_component
+from utils.data_processing import resolve_uids_in_component, format_tealium_timestamp
 from views.component_renderers import render_load_rule, render_tag, render_variable, render_extension
 
 def render_profile_explorer(data_package: Dict[str, Any]):
@@ -15,7 +15,10 @@ def render_profile_explorer(data_package: Dict[str, Any]):
         return
         
     st.header(f"Explorateur de Profil : {profile_data.get('account')} / {profile_data.get('profile')}")
-    st.markdown(f"**Version :** `{profile_data.get('version')}` | **Titre :** *{profile_data.get('versionTitle')}*")
+    
+    version_ts = profile_data.get('version', '')
+    formatted_ts = format_tealium_timestamp(version_ts)
+    st.markdown(f"**Version :** `{version_ts}` ({formatted_ts}) | **Titre :** *{profile_data.get('versionTitle')}*")
     st.markdown("---")
 
     component_map = {
@@ -38,7 +41,10 @@ def render_profile_explorer(data_package: Dict[str, Any]):
                 continue
 
             if key == "versionIds": # Special handling for simple list
-                st.write(components)
+                versions_data = []
+                for v_id in components:
+                    versions_data.append({"Version ID": v_id, "Date (Heure de Paris)": format_tealium_timestamp(v_id)})
+                st.dataframe(versions_data, use_container_width=True)
             else:
                 for component in components:
                     component_title = component.get('name', component.get('alias', 'N/A'))

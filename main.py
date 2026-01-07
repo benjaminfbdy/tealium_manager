@@ -202,10 +202,11 @@ elif st.session_state.page == "config":
                 handle_delete_config(data["name"])
                 st.success(f"Profil '{data['name']}' supprimé.")
             elif action == "download":
-                if handle_download_profile(data["name"]):
-                    st.success(f"Les données du profil '{data['name']}' ont été téléchargées et mises en cache.")
-                else:
-                    st.error(f"Échec du téléchargement pour le profil '{data['name']}'.")
+                st.session_state['download_status'] = {
+                    "name": data["name"],
+                    "success": handle_download_profile(data["name"])
+                }
+
         
         st.rerun()
 

@@ -107,7 +107,13 @@ def render_inventory_view():
                                 if keyword.lower() in item_name.lower():
                                     # UID can be 'id' or 'uid' depending on component type
                                     uid = item.get('id', item.get('uid', 'N/A'))
-                                    entry = {"Profil": profile_details, "Composant": comp_type_label, "Nom": item_name, "UID": uid}
+                                    entry = {
+                                        "Profil": profile_details, 
+                                        "Composant": comp_type_label, 
+                                        "Nom": item_name, 
+                                        "UID": uid,
+                                        "raw_data": item  # Add the raw item data here
+                                    }
                                     if 'status' in item: entry['Statut'] = item.get('status')
                                     if 'type' in item: entry['Type'] = item.get('type')
                                     if 'scope' in item: entry['Scope'] = item.get('scope')
@@ -115,9 +121,16 @@ def render_inventory_view():
         
         if inventory_data:
             st.success(f"{len(inventory_data)} composants trouvés !")
-            df = pd.DataFrame(inventory_data)
-            all_cols = ["Profil", "Composant", "Nom", "UID", "Statut", "Type", "Scope"]
-            df_cols = [col for col in all_cols if col in df.columns]
-            st.dataframe(df[df_cols])
+            
+            for item_found in inventory_data:
+                col1, col2, col3 = st.columns([3,2,1])
+                col1.write(f"**{item_found['Nom']}**")
+                col2.write(f"*{item_found['Profil']}*")
+                col3.write(f"`{item_found['Composant']}`")
+
+                with st.expander("Voir les données brutes"):
+                    st.json(item_found["raw_data"])
+                st.markdown("---")
+
         else:
             st.info("Aucun composant correspondant n'a été trouvé dans les profils en cache avec les critères fournis.")

@@ -35,6 +35,9 @@ def render_load_rule(component: Dict[str, Any]):
     st.subheader("Conditions")
     _render_conditions_table(component.get("conditions", []))
 
+    with st.expander("Voir les données brutes"):
+        st.json(component)
+
 # --- Tag Renderers ---
 
 def _render_mappings_table(mappings: List[Dict[str, Any]]):
@@ -84,6 +87,9 @@ def render_tag(component: Dict[str, Any], uid_map: Dict[int, Dict[str, str]]):
         st.subheader("Configuration")
         st.json(config, expanded=False)
 
+    with st.expander("Voir les données brutes"):
+        st.json(component)
+
 # --- Variable Renderers ---
 
 def _render_used_in(used_in: Dict[str, List[int]], uid_map: Dict[int, Dict[str, str]]):
@@ -117,6 +123,9 @@ def render_variable(component: Dict[str, Any], uid_map: Dict[int, Dict[str, str]
     st.subheader("Used In")
     _render_used_in(component.get("usedIn", {}), uid_map)
 
+    with st.expander("Voir les données brutes"):
+        st.json(component)
+
 # --- Extension Renderers ---
 
 def render_extension(component: Dict[str, Any]):
@@ -146,3 +155,6 @@ def render_extension(component: Dict[str, Any]):
                     st.json(value)
             else:
                 st.text(f"{key}: {value}")
+    
+    with st.expander("Voir les données brutes"):
+        st.json(component)

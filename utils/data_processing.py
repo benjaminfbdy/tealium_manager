@@ -1,6 +1,36 @@
 import copy
 import json
 from typing import Dict, Any, List
+import datetime
+import pytz
+
+def format_tealium_timestamp(ts: str) -> str:
+    """
+    Converts a Tealium version timestamp string into a human-readable French time format.
+    Example: '202601061747' -> '06/01/2026 18h47'
+    """
+    if not ts or len(ts) != 12:
+        return ts # Return original string if format is invalid
+    
+    try:
+        # 1. Parse the string into a naive datetime object assuming UK time
+        # Tealium's timestamps are based on UK time (GMT/BST)
+        dt_naive = datetime.datetime.strptime(ts, "%Y%m%d%H%M")
+
+        # 2. Localize the naive datetime to the 'Europe/London' timezone
+        london_tz = pytz.timezone('Europe/London')
+        dt_london = london_tz.localize(dt_naive)
+
+        # 3. Convert the London time to the 'Europe/Paris' timezone
+        paris_tz = pytz.timezone('Europe/Paris')
+        dt_paris = dt_london.astimezone(paris_tz)
+
+        # 4. Format the final datetime object
+        return dt_paris.strftime('%d/%m/%Y %Hh%M')
+        
+    except (ValueError, pytz.exceptions.PyTZError) as e:
+        print(f"Warning: Could not format timestamp '{ts}'. Error: {e}")
+        return ts # Return original on error
 
 def build_uid_to_name_map(profile_data: Dict[str, Any]) -> Dict[int, Dict[str, str]]:
     """

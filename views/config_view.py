@@ -72,11 +72,16 @@ def render_config_panel(
             if cols[3].form_submit_button("Supprimer"):
                 result["action"] = "delete"
                 result["data"] = {"name": current_name}
-        
-        if selected_config_details["is_active"]:
-            st.success(f"'{selected_config_name}' est la configuration active.")
-        else:
-            st.warning(f"'{selected_config_name}' n'est pas la configuration active.")
+
+            # Display download status message inside the form if available
+            if 'download_status' in st.session_state and st.session_state.download_status['name'] == current_name:
+                if st.session_state.download_status['success']:
+                    st.success("✅ Téléchargement et mise en cache réussis !")
+                else:
+                    st.error("❌ Échec du téléchargement. Vérifiez les logs pour plus de détails.")
+                # Clear the status so it doesn't show on the next rerun
+                del st.session_state.download_status
+
     
     st.markdown("---")
 
