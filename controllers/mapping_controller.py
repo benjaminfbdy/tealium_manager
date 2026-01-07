@@ -51,5 +51,5 @@ def process_mappings(target_df: pd.DataFrame, eventstream_data: Optional[Dict], 
         
     final_df = pd.DataFrame(all_results)
     # Reorder columns for better readability
-    final_df = final_df[['source', 'variable_cible', 'mapping_cible', 'mapping_actuel', 'status']]
+    final_df = final_df[['source', 'variable_adobe', 'mapping_cible', 'mapping_actuel', 'status']]
     return final_df

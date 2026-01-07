@@ -72,14 +72,16 @@ def render_mapping_checker_view():
                     st.subheader("3. Synthèse de la comparaison")
                     
                     # Display metrics
-                    total_mappings = len(results_df)
                     ok_count = len(results_df[results_df['status'] == 'OK'])
                     missing_count = len(results_df[results_df['status'] == 'Manquant'])
                     ko_count = len(results_df[results_df['status'] == 'KO'])
+                    extra_count = len(results_df[results_df['status'] == 'Extra'])
 
-                    st.metric("Mappings 'OK'", ok_count)
-                    st.metric("Mappings 'Manquant'", missing_count, delta_color="inverse")
-                    st.metric("Mappings 'KO'", ko_count, delta_color="inverse")
+                    m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+                    m_col1.metric("Mappings 'OK'", ok_count)
+                    m_col2.metric("Mappings 'Manquant'", missing_count, delta_color="inverse")
+                    m_col3.metric("Mappings 'KO'", ko_count, delta_color="inverse")
+                    m_col4.metric("Mappings 'Extra'", extra_count)
                     
                     # Display dataframe with filters
                     st.write("Détails des mappings :")
