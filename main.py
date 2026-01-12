@@ -2,15 +2,15 @@ import streamlit as st
 from views.config_view import render_config_panel
 from views.profile_explorer_view import render_profile_explorer
 from views.mep_history_view import render_mep_history
-from views.comparison_view import render_comparison
+from views.comparison_view import render_comparison, render_profile_comparison_page
 from views.inventory_view import render_inventory_view
 from views.mapping_checker_view import render_mapping_checker_view
 from controllers.config_controller import (
     get_tealium_connection_status,
     get_all_configurations,
     get_active_configuration_details,
-    get_global_credentials,
-    handle_save_global_credentials,
+    get_global_settings,
+    handle_save_global_settings,
     handle_add_new_config,
     handle_update_config,
     handle_set_active_config,
@@ -108,12 +108,16 @@ if st.sidebar.button("Configuration"):
     st.session_state.page = "config"
 if st.sidebar.button("Explorateur de Profil"):
     st.session_state.page = "profile_explorer"
-if st.sidebar.button("Historique des MEP"):
-    st.session_state.page = "mep_history"
 if st.sidebar.button("Inventaire"):
     st.session_state.page = "inventory"
 if st.sidebar.button("Vérificateur de Mapping"):
     st.session_state.page = "mapping_checker"
+if st.sidebar.button("Historique des MEP"):
+    st.session_state.page = "mep_history"
+if st.sidebar.button("Comparaison de MEP"):
+    st.session_state.page = "mep_history"
+if st.sidebar.button("Comparaison de Profils"):
+    st.session_state.page = "profile_comparison"
 
 
 # --- Database Management in Sidebar ---
@@ -164,13 +168,78 @@ with st.sidebar.expander("⚙️ Gestion Base de Données", expanded=False):
 
 
 if st.session_state.page == "home":
-    st.write("Utilisez le panneau latéral pour naviguer dans l'application.")
+    st.markdown("""
+    # Bienvenue sur le Tealium Manager ! 👋
+
+    Cet outil a été conçu pour simplifier et optimiser la gestion de vos configurations Tealium iQ. Fini la navigation manuelle complexe, bonjour l'automatisation et la visibilité !
+
+    ---
+
+    ## 🚀 Fonctionnalités Principales
+
+    Voici un aperçu des super-pouvoirs que cet outil met à votre disposition :
+
+    ### 1. ⚙️ **Gestion des Configurations**
+    - **Quoi ?** Centralisez tous vos accès aux comptes et profils Tealium. Gérez les API keys, les adresses e-mail et même les configurations de proxy pour les réseaux d'entreprise.
+    - **Comment ?**
+        1.  Allez dans la page **Configuration**.
+        2.  Renseignez vos **Paramètres Globaux** (API Key, e-mail de connexion).
+        3.  Ajoutez un ou plusieurs **Profils** en spécifiant le nom du compte, du profil et le serveur (EventStream/AudienceStream ou TiQ).
+        4.  Sélectionnez un profil et cliquez sur **Définir comme actif** pour commencer à travailler dessus.
+
+    ### 2. 🕵️ **Explorateur de Profil**
+    - **Quoi ?** Plongez au cœur d'un profil Tealium. Visualisez les tags, variables, extensions et règles de chargement sans ouvrir l'interface de Tealium.
+    - **Comment ?**
+        1.  Assurez-vous qu'un profil est **actif** (via la page de Configuration).
+        2.  Allez dans l'**Explorateur de Profil**.
+        3.  Naviguez à travers les différents composants en utilisant les onglets.
+        4.  Utilisez le sélecteur de version pour voyager dans le temps et inspecter les anciennes configurations !
+
+    ### 3. 📊 **Comparaison de Profils**
+    - **Quoi ?** Comparez la version "live" d'un profil avec sa dernière version non publiée pour identifier précisément les changements en attente avant une mise en production.
+    - **Comment ?**
+        1.  Rendez-vous sur la page **Comparaison de Profils**.
+        2.  L'outil chargera automatiquement la version `live` et la version la plus récente (`latest`).
+        3.  Les différences sont clairement surlignées : ajouts, modifications, suppressions. Idéal pour éviter les surprises !
+
+    ### 4. 📝 **Vérificateur de Mapping**
+    - **Quoi ?** Assurez la conformité de votre plan de taggage. Comparez un fichier de référence (ex: un CSV ou Excel listant vos variables Adobe Analytics) avec les variables réellement configurées dans Tealium.
+    - **Comment ?**
+        1.  Allez dans **Vérificateur de Mapping**.
+        2.  Uploadez votre fichier de référence (SDR).
+        3.  Uploadez le fichier de mapping JSON de votre connecteur Tealium.
+        4.  L'outil vous montrera les correspondances, les erreurs et les oublis.
+
+    ### 5. 🗂️ **Inventaire**
+    - **Quoi ?** Générez un inventaire complet de tous les composants d'un profil (tags, variables, etc.) et exportez-le au format CSV.
+    - **Comment ?**
+        1.  Cliquez sur **Inventaire**.
+        2.  Cliquez sur le bouton pour lancer la génération.
+        3.  Une fois terminé, le fichier est prêt à être téléchargé.
+
+    ### 6. 📜 **Historique des MEP (Mises en Production)**
+    - **Quoi ?** Gardez un œil sur qui a publié quoi et quand.
+    - **Comment ?**
+        1.  Allez dans **Historique des MEP**.
+        2.  La liste des dernières publications pour le profil actif s'affiche.
+
+    ---
+
+    ## 💡 Premiers Pas
+
+    1.  Commencez par la page **Configuration** pour enregistrer vos identifiants Tealium.
+    2.  Ajoutez votre premier profil et activez-le.
+    3.  Explorez-le avec l'**Explorateur de Profil**.
+    4.  Lancez une **Comparaison** pour voir les changements en attente.
+
+    Bonne découverte !
+    """)
 elif st.session_state.page == "config":
     st.subheader("Gestion des Configurations Tealium")
     
-    # Load all configurations, global credentials, and active config details
+    # Load all configurations, global settings, and active config details
     all_configurations = get_all_configurations()
-    global_creds = get_global_credentials()
+    global_settings = get_global_settings()
     active_config_details = get_active_configuration_details()
     active_config_name = active_config_details.get("name") if active_config_details else None
 
@@ -178,7 +247,7 @@ elif st.session_state.page == "config":
     is_connected = get_tealium_connection_status()
     
     # Render the config panel and capture user action
-    action_result = render_config_panel(is_connected, all_configurations, active_config_name, global_creds)
+    action_result = render_config_panel(is_connected, all_configurations, active_config_name, global_settings)
 
     if action_result["action"]:
         action = action_result["action"]
@@ -186,8 +255,8 @@ elif st.session_state.page == "config":
         
         with st.spinner("Traitement..."):
             if action == "save_global":
-                handle_save_global_credentials(data)
-                st.success("Identifiants globaux enregistrés.")
+                handle_save_global_settings(data)
+                st.success("Paramètres globaux enregistrés.")
             elif action == "add_new":
                 if handle_add_new_config(data):
                     st.success(f"Profil '{data['name']}' ajouté.")
@@ -284,6 +353,8 @@ elif st.session_state.page == "inventory":
     render_inventory_view()
 elif st.session_state.page == "mapping_checker":
     render_mapping_checker_view()
+elif st.session_state.page == "profile_comparison":
+    render_profile_comparison_page()
 elif st.session_state.page == "comparison":
     st.subheader("Comparaison de MEPs")
     if 'meps_to_compare' in st.session_state and len(st.session_state.meps_to_compare) == 2:

@@ -2,20 +2,32 @@ from utils.tealium_client import TealiumClient
 from database import (
     save_configuration, load_all_configurations, get_active_configuration, 
     set_active_configuration, delete_configuration, get_db_status, reset_database,
-    save_global_credentials, load_global_credentials, cache_profile_data
+    save_global_settings, load_global_settings, cache_profile_data
 )
 from typing import Dict, List, Optional
+
+def _create_proxies_dict(settings: Dict) -> Optional[Dict]:
+    """Helper to create a proxy dictionary if credentials are provided."""
+    proxy_user = settings.get("proxy_user")
+    proxy_password = settings.get("proxy_password")
+    if proxy_user and proxy_password:
+        proxy_host = "proxy-users.intranet.bpce-it.fr"
+        proxy_port = "8080"
+        proxy_url_base = f"{proxy_host}:{proxy_port}"
+        proxy_auth_url = f"http://{proxy_user}:{proxy_password}@{proxy_url_base}"
+        return {"http": proxy_auth_url, "https": proxy_auth_url}
+    return None
 
 def get_all_configurations() -> List[Dict[str, str]]:
     """Loads all Tealium profile configurations from the database."""
     return load_all_configurations()
 
-def get_global_credentials() -> Dict[str, str]:
-    """Loads the global API key and email."""
-    return load_global_credentials()
+def get_global_settings() -> Dict[str, str]:
+    """Loads the global settings (API key, email, proxy)."""
+    return load_global_settings()
 
 def get_active_configuration_details() -> Optional[Dict[str, str]]:
-    """Loads the details of the active Tealium configuration, including global credentials."""
+    """Loads the details of the active Tealium configuration, including global settings."""
     return get_active_configuration()
 
 def get_tealium_connection_status() -> bool:
@@ -23,26 +35,34 @@ def get_tealium_connection_status() -> bool:
     Attempts to initialize TealiumClient with the active config and authenticate.
     Returns True if authentication is successful, False otherwise.
     """
+    active_config = get_active_configuration()
+    if not active_config or not all(active_config.get(k) for k in ["account", "profile", "api_key", "email"]):
+        return False
+        
     try:
-        active_config = get_active_configuration()
-        if not active_config or not active_config.get("api_key"):
-            return False
-            
+        proxies = _create_proxies_dict(active_config)
         client = TealiumClient(
             account=active_config.get("account"),
             profile=active_config.get("profile"),
             api_key=active_config.get("api_key"),
-            email=active_config.get("email")
+            email=active_config.get("email"),
+            proxies=proxies
         )
+        # _authenticate_v2 will raise an exception on failure
         client._authenticate_v2()
         return bool(client.token_v2)
-    except (ValueError, Exception) as e:
+    except Exception as e:
         print(f"An error occurred during Tealium connection attempt: {e}")
         return False
 
-def handle_save_global_credentials(creds: Dict[str, str]):
-    """Saves the global API key and email."""
-    save_global_credentials(creds.get("api_key", ""), creds.get("email", ""))
+def handle_save_global_settings(settings: Dict[str, str]):
+    """Saves the global settings (API key, email, proxy)."""
+    save_global_settings(
+        settings.get("api_key", ""), 
+        settings.get("email", ""),
+        settings.get("proxy_user", ""),
+        settings.get("proxy_password", "")
+    )
 
 def handle_add_new_config(config_data: Dict[str, str]) -> bool:
     """Saves a new profile configuration."""
@@ -70,8 +90,6 @@ def handle_update_config(config_data: Dict[str, str]) -> bool:
     if not all([name, account, profile]):
         return False
     
-    # We need the current active status to preserve it, which is not passed directly
-    # Re-loading the config to check its status before saving.
     existing_configs = load_all_configurations()
     is_active = next((cfg.get("is_active", False) for cfg in existing_configs if cfg["name"] == name), False)
     
@@ -99,22 +117,23 @@ def handle_delete_config(name: str):
 
 def handle_download_profile(config_name: str) -> bool:
     """Fetches the latest profile data and caches it."""
-    creds = load_global_credentials()
+    settings = get_global_settings()
     configs = load_all_configurations()
     target_config = next((cfg for cfg in configs if cfg["name"] == config_name), None)
 
-    if not target_config or not creds.get("api_key"):
+    if not target_config or not settings.get("api_key"):
         print(f"Error: Cannot download profile for '{config_name}'. Missing config or global credentials.")
         return False
         
     try:
+        proxies = _create_proxies_dict(settings)
         client = TealiumClient(
             account=target_config["account"],
             profile=target_config["profile"],
-            api_key=creds["api_key"],
-            email=creds["email"]
+            api_key=settings["api_key"],
+            email=settings["email"],
+            proxies=proxies
         )
-        # Explicitly fetch all component types needed for the inventory
         component_types_to_fetch = ["tags", "extensions", "loadRules", "variables"]
         profile_data_response = client.get_profile_components(component_types=component_types_to_fetch)
         

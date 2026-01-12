@@ -16,14 +16,25 @@ def render_config_panel(
     
     # --- Global Credentials ---
     st.subheader("Identifiants Globaux")
-    with st.expander("Gérer la clé API et l'email", expanded=not bool(global_credentials)):
+    with st.expander("Gérer la clé API, l'email et le Proxy", expanded=not bool(global_credentials)):
         with st.form("global_creds_form"):
+            st.write("Identifiants de l'API Tealium")
             api_key = st.text_input("Clé API Tealium", value=global_credentials.get("api_key", ""), type="password")
             email = st.text_input("Email Tealium", value=global_credentials.get("email", ""))
             
-            if st.form_submit_button("Enregistrer les identifiants globaux"):
+            st.markdown("---")
+            st.write("Configuration du Proxy (optionnel)")
+            proxy_user = st.text_input("Utilisateur Proxy", value=global_credentials.get("proxy_user", ""))
+            proxy_password = st.text_input("Mot de passe Proxy", value=global_credentials.get("proxy_password", ""), type="password")
+
+            if st.form_submit_button("Enregistrer les Paramètres Globaux"):
                 result["action"] = "save_global"
-                result["data"] = {"api_key": api_key, "email": email}
+                result["data"] = {
+                    "api_key": api_key, 
+                    "email": email,
+                    "proxy_user": proxy_user,
+                    "proxy_password": proxy_password
+                }
     
     st.markdown("---")
 

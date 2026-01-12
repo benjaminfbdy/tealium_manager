@@ -2,7 +2,19 @@ import pandas as pd
 from typing import Dict, Optional, Any, List
 from utils.mapping_logic import parse_target_mappings, parse_eventstream_mappings, parse_tiq_mappings, compare_mappings
 from utils.tealium_client import TealiumClient
-from database import load_global_credentials
+from database import load_global_settings
+
+def _create_proxies_dict(settings: Dict) -> Optional[Dict]:
+    """Helper to create a proxy dictionary if credentials are provided."""
+    proxy_user = settings.get("proxy_user")
+    proxy_password = settings.get("proxy_password")
+    if proxy_user and proxy_password:
+        proxy_host = "proxy-users.intranet.bpce-it.fr"
+        proxy_port = "8080"
+        proxy_url_base = f"{proxy_host}:{proxy_port}"
+        proxy_auth_url = f"http://{proxy_user}:{proxy_password}@{proxy_url_base}"
+        return {"http": proxy_auth_url, "https": proxy_auth_url}
+    return None
 
 def process_mappings(target_df: pd.DataFrame, eventstream_data: Optional[Dict], tiq_profile_config: Optional[Dict]) -> pd.DataFrame:
     """
@@ -25,15 +37,17 @@ def process_mappings(target_df: pd.DataFrame, eventstream_data: Optional[Dict], 
         print(f"Processing Tealium iQ profile: {tiq_profile_config['name']}")
         
         # Fetch the latest profile data from the API
-        creds = load_global_credentials()
-        if not creds.get('api_key'):
+        settings = load_global_settings()
+        if not settings.get('api_key'):
             raise ValueError("Les identifiants globaux (clé API) ne sont pas configurés.")
         
+        proxies = _create_proxies_dict(settings)
         client = TealiumClient(
             account=tiq_profile_config["account"],
             profile=tiq_profile_config["profile"],
-            api_key=creds["api_key"],
-            email=creds["email"]
+            api_key=settings["api_key"],
+            email=settings["email"],
+            proxies=proxies
         )
         
         profile_data_response = client.get_profile_components(component_types=['tags'])

@@ -4,6 +4,18 @@ from utils.data_processing import build_uid_to_name_map
 from typing import Dict, List, Optional
 import streamlit as st
 
+def _create_proxies_dict(settings: Dict) -> Optional[Dict]:
+    """Helper to create a proxy dictionary if credentials are provided."""
+    proxy_user = settings.get("proxy_user")
+    proxy_password = settings.get("proxy_password")
+    if proxy_user and proxy_password:
+        proxy_host = "proxy-users.intranet.bpce-it.fr"
+        proxy_port = "8080"
+        proxy_url_base = f"{proxy_host}:{proxy_port}"
+        proxy_auth_url = f"http://{proxy_user}:{proxy_password}@{proxy_url_base}"
+        return {"http": proxy_auth_url, "https": proxy_auth_url}
+    return None
+
 def get_profile_data(version_id: Optional[str] = None) -> Dict:
     """
     Fetches a specific version of profile data and builds a UID map, using a cache.
@@ -33,11 +45,13 @@ def get_profile_data(version_id: Optional[str] = None) -> Dict:
     progress_bar = st.progress(0, text="Initialisation de la connexion...")
 
     try:
+        proxies = _create_proxies_dict(active_config)
         client = TealiumClient(
             account=account,
             profile=profile,
             api_key=active_config.get("api_key"),
-            email=active_config.get("email")
+            email=active_config.get("email"),
+            proxies=proxies
         )
     except ValueError as e:
         progress_bar.empty()

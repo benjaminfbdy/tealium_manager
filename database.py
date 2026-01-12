@@ -14,10 +14,15 @@ def get_db_connection():
     return conn
 
 def initialize_database():
-    """Initializes the database and creates tables if they don't exist."""
+    """
+    Initializes the database. Creates tables if they don't exist
+    and applies necessary schema migrations.
+    This function is idempotent and safe to call multiple times.
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
-    # Table for global settings (API Key, Email)
+
+    # Table for global settings
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS global_settings (
             id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -25,6 +30,19 @@ def initialize_database():
             email TEXT
         )
     """)
+
+    # --- Schema Migration for global_settings ---
+    cursor.execute("PRAGMA table_info(global_settings)")
+    columns = [row['name'] for row in cursor.fetchall()]
+    
+    if 'proxy_user' not in columns:
+        print("MIGRATING SCHEMA: Adding 'proxy_user' to 'global_settings' table.")
+        cursor.execute("ALTER TABLE global_settings ADD COLUMN proxy_user TEXT")
+    
+    if 'proxy_password' not in columns:
+        print("MIGRATING SCHEMA: Adding 'proxy_password' to 'global_settings' table.")
+        cursor.execute("ALTER TABLE global_settings ADD COLUMN proxy_password TEXT")
+
     # Table for storing Tealium configurations (profiles)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS configurations (
@@ -55,27 +73,55 @@ def initialize_database():
     conn.commit()
     conn.close()
 
-# --- Global Credentials Functions ---
+# --- Global Settings Functions ---
 
-def save_global_credentials(api_key: str, email: str):
-    """Saves or updates the global API key and email."""
+def save_global_settings(api_key: str, email: str, proxy_user: str = "", proxy_password: str = ""):
+    """Saves or updates the global settings."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        "INSERT OR REPLACE INTO global_settings (id, api_key, email) VALUES (1, ?, ?)",
-        (api_key, email)
-    )
-    conn.commit()
-    conn.close()
+    try:
+        cursor.execute(
+            "INSERT OR REPLACE INTO global_settings (id, api_key, email, proxy_user, proxy_password) VALUES (1, ?, ?, ?, ?)",
+            (api_key, email, proxy_user, proxy_password)
+        )
+        conn.commit()
+    except sqlite3.OperationalError as e:
+        print(f"Database error on save: {e}. A reset might be needed if this persists.")
+    finally:
+        conn.close()
 
-def load_global_credentials() -> Dict[str, str]:
-    """Loads the global API key and email."""
+
+def load_global_settings() -> Dict[str, str]:
+    """Loads the global settings, ensuring all expected keys are present."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT api_key, email FROM global_settings WHERE id = 1")
+    
+    # Ensure a default row exists, especially for the first run.
+    cursor.execute("INSERT OR IGNORE INTO global_settings (id) VALUES (1)")
+
+    cursor.execute("SELECT * FROM global_settings WHERE id = 1")
     row = cursor.fetchone()
     conn.close()
-    return dict(row) if row else {}
+
+    settings = dict(row) if row else {}
+
+    # Default dictionary to ensure all keys are present
+    defaults = {
+        'api_key': '',
+        'email': '',
+        'proxy_user': '',
+        'proxy_password': ''
+    }
+    
+    # Merge defaults with settings from DB
+    defaults.update(settings)
+
+    # Ensure no None values are returned, replace with empty strings
+    for key, value in defaults.items():
+        if value is None:
+            defaults[key] = ''
+            
+    return defaults
 
 # --- Configuration Management Functions ---
 
@@ -100,13 +146,11 @@ def load_all_configurations() -> List[Dict[str, str]]:
     return [dict(row) for row in rows]
 
 def get_active_configuration() -> Optional[Dict[str, str]]:
-    """Gets the currently active configuration, including global credentials."""
+    """Gets the currently active configuration, including global settings."""
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    cursor.execute("SELECT api_key, email FROM global_settings WHERE id = 1")
-    global_creds_row = cursor.fetchone()
-    global_creds = dict(global_creds_row) if global_creds_row else {}
+    global_settings = load_global_settings()
 
     cursor.execute("SELECT name, account, profile FROM configurations WHERE is_active = 1")
     active_config_row = cursor.fetchone()
@@ -115,10 +159,11 @@ def get_active_configuration() -> Optional[Dict[str, str]]:
 
     if active_config_row:
         active_config = dict(active_config_row)
-        active_config.update(global_creds)
+        active_config.update(global_settings)
         return active_config
     
-    return None
+    # Return just global settings if no profile is active
+    return global_settings if global_settings else None
 
 def set_active_configuration(name: str):
     """Sets a specific configuration as active."""

@@ -4,6 +4,18 @@ from utils.data_processing import build_uid_to_name_map, diff_revisions
 from typing import List, Dict, Any, Optional
 import streamlit as st
 
+def _create_proxies_dict(settings: Dict) -> Optional[Dict]:
+    """Helper to create a proxy dictionary if credentials are provided."""
+    proxy_user = settings.get("proxy_user")
+    proxy_password = settings.get("proxy_password")
+    if proxy_user and proxy_password:
+        proxy_host = "proxy-users.intranet.bpce-it.fr"
+        proxy_port = "8080"
+        proxy_url_base = f"{proxy_host}:{proxy_port}"
+        proxy_auth_url = f"http://{proxy_user}:{proxy_password}@{proxy_url_base}"
+        return {"http": proxy_auth_url, "https": proxy_auth_url}
+    return None
+
 def get_meps_data() -> Optional[List[Dict]]:
     """
     Fetches the revision history for the active Tealium iQ profile, using a cache,
@@ -19,11 +31,13 @@ def get_meps_data() -> Optional[List[Dict]]:
     cache_key_prefix = f"profile_{account}_{profile}"
     
     try:
+        proxies = _create_proxies_dict(active_config)
         client = TealiumClient(
             account=account,
             profile=profile,
             api_key=active_config.get("api_key"),
-            email=active_config.get("email")
+            email=active_config.get("email"),
+            proxies=proxies
         )
     except ValueError as e:
         st.error(f"Error initializing TealiumClient: {e}")
@@ -74,158 +88,82 @@ def get_meps_data() -> Optional[List[Dict]]:
     return prod_revisions
 
 def get_mep_comparison_data(rev_id_1: str, rev_id_2: str) -> Dict[str, Any]:
-
     """
-
     Fetches details for two specific revisions using the V3 API, builds a combined UID map,
-
     calculates the diff, and returns a data package for the comparison view.
-
     """
-
     active_config = get_active_configuration()
-
     if not active_config:
-
         return {"error": "No active configuration found."}
-
         
-
     account = active_config.get("account")
-
     profile = active_config.get("profile")
-
     cache_key_prefix = f"profile_full_{account}_{profile}"
-
     
-
     component_types_to_fetch = ["variables", "tags", "loadRules", "extensions", "events"]
 
-
-
     # Helper to get a single revision's full components
-
     def get_single_revision_components(rev_id):
-
         cache_key = f"{cache_key_prefix}_revision_{rev_id}"
-
         cached = get_cached_data(cache_key)
-
         if cached and not cached.get("error"):
-
             st.info(f"MEP {rev_id} chargée depuis le cache.")
-
             return cached.get("data")
-
         
-
         try:
-
+            proxies = _create_proxies_dict(active_config)
             client = TealiumClient(
-
                 account=account, profile=profile, 
-
-                api_key=active_config.get("api_key"), email=active_config.get("email")
-
+                api_key=active_config.get("api_key"), email=active_config.get("email"),
+                proxies=proxies
             )
-
             # Use the V3 get_profile_components method
-
             response = client.get_profile_components(
-
                 publish_version=rev_id, 
-
                 component_types=component_types_to_fetch
-
             )
-
             if not response.get("error"):
-
                 set_cached_data(cache_key, response)
-
                 return response.get("data")
-
             else:
-
                 st.error(f"API Error for revision {rev_id}: {response.get('message')}")
-
                 return None
-
         except ValueError as e:
-
             st.error(f"Error initializing TealiumClient: {e}")
-
             return None
-
     
-
     st.info(f"Chargement des composants pour la MEP {rev_id_1}...")
-
     details1 = get_single_revision_components(rev_id_1)
-
     
-
     st.info(f"Chargement des composants pour la MEP {rev_id_2}...")
-
     details2 = get_single_revision_components(rev_id_2)
 
-
-
     if not details1 or not details2:
-
         st.error("Impossible de charger les composants pour l'une ou les deux MEPs.")
-
         return {"error": "Impossible de charger les composants pour l'une ou les deux MEPs."}
 
-
-
     # Build a combined UID map to resolve all possible UIDs
-
     st.info("Construction de la carte de résolution des UIDs...")
-
     combined_data_for_map = {}
-
     for key in component_types_to_fetch:
-
         list1 = details1.get(key, [])
-
         list2 = details2.get(key, [])
-
         combined_data_for_map[key] = list1 + list2
-
     uid_map = build_uid_to_name_map(combined_data_for_map)
 
-
-
     # Calculate the diff
-
     st.info("Calcul des différences...")
-
     diff = diff_revisions(details1, details2)
-
     
-
-    # Remove the verbose debug logging from the diff function
-
-    # (Assuming it's still there, this is a good place to note it)
-
-    
-
     return {
-
         "error": False,
-
         "data": {
-
             "rev1_id": rev_id_1,
-
             "rev2_id": rev_id_2,
-
             "diff": diff,
-
             "uid_map": uid_map
-
         }
-
     }
+
+
 

@@ -1,27 +1,17 @@
 import os
 import requests
-from dotenv import load_dotenv
-from database import get_active_configuration
 from typing import Dict, List, Optional
 
 class TealiumClient:
-    def __init__(self, account=None, profile=None, api_key=None, email=None):
+    def __init__(self, account: str, profile: str, api_key: str, email: str, proxies: Optional[Dict] = None):
         self.account = account
         self.profile = profile
         self.api_key = api_key
         self.email = email
+        self.proxies = proxies
         
-        # Load credentials if not provided
         if not all([self.account, self.profile, self.api_key, self.email]):
-            active_config = get_active_configuration()
-            if active_config:
-                self.account = active_config.get("account")
-                self.profile = active_config.get("profile")
-                self.api_key = active_config.get("api_key")
-                self.email = active_config.get("email")
-
-        if not all([self.account, self.profile, self.api_key, self.email]):
-            raise ValueError("Les identifiants Tealium (compte, profil, clé API, email) n'ont pas été trouvés.")
+            raise ValueError("Les identifiants Tealium (compte, profil, clé API, email) sont obligatoires.")
 
         self.base_url_v2 = "https://api.tealiumiq.com/v2"
         self.base_url_v3_auth = "https://platform.tealiumapis.com/v3"
@@ -30,36 +20,42 @@ class TealiumClient:
         self.token_v3 = None
         self.host_v3 = None
 
+    def _request(self, method, url, **kwargs):
+        """Makes an HTTP request, using proxies if configured."""
+        if self.proxies and (self.proxies.get('http') or self.proxies.get('https')):
+            kwargs['proxies'] = self.proxies
+        # The calling method is expected to handle exceptions
+        return requests.request(method, url, **kwargs)
+
     def _authenticate_v2(self):
         """Authenticates with Tealium iQ API v2."""
         if self.token_v2: return True
-        if not all([self.api_key, self.email]): return False
 
         auth_url = f"{self.base_url_v2}/auth"
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         payload = {"username": self.email, "key": self.api_key}
         
         try:
-            response = requests.post(auth_url, data=payload, headers=headers)
+            response = self._request("post", auth_url, data=payload, headers=headers)
             response.raise_for_status()
             self.token_v2 = response.json().get("token")
             print("Successfully authenticated with Tealium iQ API v2.")
             return True
         except requests.exceptions.RequestException as e:
             print(f"V2 Authentication failed: {e}")
-            return False
+            # Re-raise to allow caller to know about the failure
+            raise e
 
     def _authenticate_v3(self):
         """Authenticates with Tealium API v3 to get a token and a region-specific host."""
         if self.token_v3 and self.host_v3: return True
-        if not all([self.api_key, self.email, self.account, self.profile]): return False
         
         auth_url = f"{self.base_url_v3_auth}/auth/accounts/{self.account}/profiles/{self.profile}"
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         payload = {"username": self.email, "key": self.api_key}
 
         try:
-            response = requests.post(auth_url, data=payload, headers=headers)
+            response = self._request("post", auth_url, data=payload, headers=headers)
             response.raise_for_status()
             data = response.json()
             self.token_v3 = data.get("token")
@@ -67,19 +63,27 @@ class TealiumClient:
             if self.token_v3 and self.host_v3:
                 print(f"Successfully authenticated with Tealium API v3 for host: {self.host_v3}")
                 return True
-            return False
+            return False # Should not happen if status is 200
         except requests.exceptions.RequestException as e:
             print(f"V3 Authentication failed: {e}")
-            return False
+            raise e
 
     def _get_headers_v2(self):
-        if self._authenticate_v2():
-            return {"Authorization": f"Bearer {self.token_v2}", "Content-Type": "application/json"}
+        try:
+            if self._authenticate_v2():
+                return {"Authorization": f"Bearer {self.token_v2}", "Content-Type": "application/json"}
+        except requests.exceptions.RequestException:
+            # Authentication failed, return None
+            return None
         return None
 
     def _get_headers_v3(self):
-        if self._authenticate_v3():
-            return {"Authorization": f"Bearer {self.token_v3}", "Content-Type": "application/json"}
+        try:
+            if self._authenticate_v3():
+                return {"Authorization": f"Bearer {self.token_v3}", "Content-Type": "application/json"}
+        except requests.exceptions.RequestException:
+            # Authentication failed, return None
+            return None
         return None
 
     def get_profile_components(self, component_types: Optional[List[str]] = None, publish_version: Optional[str] = None) -> Dict:
@@ -93,16 +97,12 @@ class TealiumClient:
         if publish_version:
             params['publishVersion'] = publish_version
         
-        print(f"DEBUG: Fetching profile components from URL: {url}")
-        print(f"DEBUG: Params: {params}")
-
         response = None
         try:
-            response = requests.get(url, headers=headers, params=params)
+            response = self._request("get", url, headers=headers, params=params)
             response.raise_for_status()
             return {"error": False, "data": response.json()}
         except requests.exceptions.HTTPError as e:
-            # ... (error handling logic remains the same)
             error_message = f"HTTP Error fetching profile components: {e}"
             print(f"DEBUG: {error_message}")
             if response is not None:
@@ -122,7 +122,7 @@ class TealiumClient:
 
         url = f"{self.base_url_v2}/manifest/accounts/{self.account}/profiles/{self.profile}/revisions"
         try:
-            response = requests.get(url, headers=headers)
+            response = self._request("get", url, headers=headers)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -139,7 +139,7 @@ class TealiumClient:
 
         url = f"{self.base_url_v2}/manifest/accounts/{self.account}/profiles/{self.profile}/revisions/{revision_id}/details"
         try:
-            response = requests.get(url, headers=headers)
+            response = self._request("get", url, headers=headers)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:

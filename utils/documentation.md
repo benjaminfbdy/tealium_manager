@@ -1,4 +1,3 @@
-
 ## [Sprint 1] - Initial Setup & Bugfixes
 
 ### How to Run the Application
@@ -47,3 +46,28 @@ This will start the Streamlit server, and you can access the application in your
 *   **Dette Technique**:
     *   Le cache n'a pas de mécanisme d'expiration automatique (TTL). L'utilisateur doit manuellement retélécharger un profil pour le mettre à jour. Une stratégie de rafraîchissement périodique pourrait être envisagée.
     *   La gestion des erreurs de l'API Tealium lors du téléchargement pourrait être plus détaillée pour l'utilisateur.
+
+## [Sprint 4] - Feature: Live vs Latest Profile Comparison
+
+**👔 Vue Métier**: Les utilisateurs peuvent désormais comparer la dernière version non publiée d'un profil avec sa version "live" (actuellement publiée). Cela offre un filet de sécurité crucial avant de publier des modifications, permettant aux développeurs et aux gestionnaires de visualiser précisément ce qui va changer, réduisant ainsi le risque de mettre en production des configurations involontaires ou boguées.
+
+**⚙️ Vue Technique**:
+*   **Architecture & Refactoring**:
+    *   La vue de comparaison (`views/comparison_view.py`) a été simplifiée pour ne demander qu'un seul profil à l'utilisateur, améliorant l'expérience.
+    *   Le contrôleur (`controllers/comparison_controller.py`) a été profondément remanié. La fonction `process_comparison` orchestre maintenant la récupération de toutes les révisions d'un profil, identifie la révision "live" et la plus récente via le `TealiumClient`.
+    *   La fonctionnalité s'appuie sur les méthodes existantes de `TealiumClient` (`get_revisions`, `get_revision_details`, `get_profile_components`) pour récupérer les données des deux versions.
+    *   La logique de comparaison existante (`compare_profiles`) est ensuite utilisée pour générer le différentiel entre ces deux versions spécifiques.
+*   **Gestion des Cas Limites**:
+    *   La fonctionnalité gère correctement les cas où un profil n'a jamais été publié (aucun "live" à comparer) ou lorsqu'il n'y a aucune modification non publiée (la version la plus récente est la version live).
+*   **Correction de Bug**:
+    *   Un bug latent dans l'instanciation de `TealiumClient` (passage de `api_email` au lieu de `email`) a été corrigé pendant le refactoring.
+*   **Dette Technique**: Aucune dette technique significative introduite. L'implémentation est propre et s'intègre bien à l'architecture existante.
+
+## [Sprint 5] - Amélioration de la Page d'Accueil
+
+**👔 Vue Métier**: Remplacer la page d'accueil vide par un guide de démarrage rapide et une présentation des fonctionnalités. L'objectif est de permettre aux nouveaux utilisateurs de comprendre immédiatement la valeur de l'outil et de savoir comment utiliser chaque fonctionnalité, améliorant ainsi l'adoption et la satisfaction.
+
+**⚙️ Vue Technique**:
+*   **Modification**: Mise à jour du fichier `main.py`.
+*   **Implémentation**: Remplacement d'un simple `st.write` par un `st.markdown` contenant une description détaillée des fonctionnalités et des guides "comment faire".
+*   **Dette Technique**: Aucune. C'est une simple mise à jour de contenu qui n'introduit pas de complexité technique.
