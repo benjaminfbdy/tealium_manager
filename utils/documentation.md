@@ -71,3 +71,31 @@ This will start the Streamlit server, and you can access the application in your
 *   **Modification**: Mise à jour du fichier `main.py`.
 *   **Implémentation**: Remplacement d'un simple `st.write` par un `st.markdown` contenant une description détaillée des fonctionnalités et des guides "comment faire".
 *   **Dette Technique**: Aucune. C'est une simple mise à jour de contenu qui n'introduit pas de complexité technique.
+
+## [Sprint 6] - Intégration Adobe Analytics API & Dashboard
+
+**👔 Vue Métier**: Permettre aux utilisateurs de se connecter à l'API Adobe Analytics et de visualiser des données de performance directement dans l'application. L'objectif est de créer un mini-dashboard pour suivre des métriques clés (pages vues, visites) sur une période donnée et avec une granularité choisie, sans avoir à ouvrir Analysis Workspace. Cela offre un gain de temps et une première étape vers un monitoring consolidé.
+
+**⚙️ Vue Technique**:
+*   **Architecture**:
+    *   **Base de Données**: Extension de `database.py` avec une nouvelle table `adobe_configurations` pour stocker les credentials de multiples organisations Adobe (y compris la clé privée, le secret client, etc.).
+    *   **Client API**: Création d'un client API robuste, `utils/adobe_client.py`, gérant l'authentification complexe JWT (génération, échange de token) et la pagination automatique des rapports. Les dépendances `PyJWT` et `cryptography` ont été ajoutées.
+    *   **Stack MVC**: Ajout d'une nouvelle stack complète pour la fonctionnalité :
+        *   **Vue**: `views/adobe_dashboard_view.py` pour l'interface utilisateur en Streamlit (sélecteurs, graphiques, tableaux).
+        *   **Contrôleur**: `controllers/adobe_controller.py` pour la logique métier (construction des requêtes, formatage des données en DataFrame).
+    *   **Configuration**: Mise à jour majeure de la page de configuration (`config_view.py`, `config_controller.py`, `main.py`) pour permettre la gestion CRUD (Créer, Lire, Mettre à jour, Supprimer) de ces nouvelles configurations Adobe.
+*   **Dette Technique**:
+    *   Le dashboard est une première version "light" : les dimensions et métriques sont pour l'instant codées en dur dans la vue. Une évolution future serait de les charger dynamiquement depuis l'API Adobe pour offrir plus de flexibilité.
+    *   La gestion des erreurs de l'API Adobe pourrait être plus fine et mieux présentée à l'utilisateur (actuellement, les erreurs sont principalement loguées dans la console).
+    *   Les filtres (segments), bien que prévus dans l'architecture de la requête, ne sont pas encore implémentés dans l'interface utilisateur du dashboard.
+
+## [Sprint 7] - Amélioration de l'Authentification Adobe
+
+**👔 Vue Métier**: Simplifier la configuration initiale de l'intégration Adobe. Les utilisateurs peuvent maintenant choisir de coller un "Access Token" généré manuellement, ce qui leur permet de tester la fonctionnalité immédiatement sans passer par le processus complexe de création d'un projet Service Account (JWT). Cela réduit la barrière à l'entrée et facilite le dépannage.
+
+**⚙️ Vue Technique**:
+*   **Architecture**: Le système d'authentification Adobe a été rendu polymorphe.
+    *   **Base de Données**: La table `adobe_configurations` dans `database.py` a été enrichie avec une colonne `auth_method` ('jwt' ou 'manual') et `manual_access_token`. La fonction de sauvegarde a été adaptée pour gérer une structure de données flexible.
+    *   **API Client (`adobe_client.py`)**: Le client est maintenant capable de gérer les deux modes. La méthode `_ensure_token` a été modifiée pour soit utiliser le token manuel, soit déclencher le flux de rafraîchissement JWT.
+    *   **UI/UX (`config_view.py`)**: L'interface de configuration affiche dynamiquement les champs de saisie pertinents en fonction du mode d'authentification choisi par l'utilisateur via un bouton radio, améliorant l'expérience utilisateur.
+*   **Dette Technique**: Aucune nouvelle dette significative. Cette modification rend au contraire le système plus flexible et plus facile à maintenir ou à faire évoluer (par exemple, pour supporter OAuth 2.0 à l'avenir).

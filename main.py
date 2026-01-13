@@ -17,8 +17,15 @@ from controllers.config_controller import (
     handle_delete_config,
     handle_download_profile,
     get_database_status,
-    handle_database_reset
+    handle_database_reset,
+    get_all_adobe_configurations,
+    get_active_adobe_configuration_details,
+    get_adobe_connection_status,
+    handle_add_new_adobe_config,
+    handle_set_active_adobe_config,
+    handle_delete_adobe_config
 )
+from views.adobe_dashboard_view import render_adobe_dashboard_view
 from controllers.profile_controller import get_profile_data
 from controllers.mep_controller import get_meps_data, get_mep_comparison_data
 
@@ -106,6 +113,9 @@ if st.sidebar.button("Accueil"):
     st.session_state.page = "home"
 if st.sidebar.button("Configuration"):
     st.session_state.page = "config"
+
+st.sidebar.divider()
+st.sidebar.subheader("Tealium")
 if st.sidebar.button("Explorateur de Profil"):
     st.session_state.page = "profile_explorer"
 if st.sidebar.button("Inventaire"):
@@ -114,10 +124,13 @@ if st.sidebar.button("Vérificateur de Mapping"):
     st.session_state.page = "mapping_checker"
 if st.sidebar.button("Historique des MEP"):
     st.session_state.page = "mep_history"
-if st.sidebar.button("Comparaison de MEP"):
-    st.session_state.page = "mep_history"
 if st.sidebar.button("Comparaison de Profils"):
     st.session_state.page = "profile_comparison"
+
+st.sidebar.divider()
+st.sidebar.subheader("Adobe Analytics")
+if st.sidebar.button("Dashboard"):
+    st.session_state.page = "adobe_dashboard"
 
 
 # --- Database Management in Sidebar ---
@@ -136,7 +149,8 @@ with st.sidebar.expander("⚙️ Gestion Base de Données", expanded=False):
 
         st.info(f"**Statut :** {db_status.get('status')}")
         st.write(f"**Taille :** {size_str}")
-        st.write(f"**Configs :** {db_status.get('configurations_count')}")
+        st.write(f"**Configs Tealium :** {db_status.get('configurations_count', 0)}")
+        st.write(f"**Configs Adobe :** {db_status.get('adobe_configurations_count', 0)}")
         st.write(f"**Cache :** {db_status.get('cached_items_count')} objets")
         st.caption(f"Dernière modif.: {db_status.get('last_modified')}")
 
@@ -235,51 +249,80 @@ if st.session_state.page == "home":
     Bonne découverte !
     """)
 elif st.session_state.page == "config":
-    st.subheader("Gestion des Configurations Tealium")
+    st.title("Gestion des Configurations")
     
-    # Load all configurations, global settings, and active config details
-    all_configurations = get_all_configurations()
+    # --- Load all data from controller ---
     global_settings = get_global_settings()
-    active_config_details = get_active_configuration_details()
-    active_config_name = active_config_details.get("name") if active_config_details else None
-
-    # Determine connection status based on the active configuration
-    is_connected = get_tealium_connection_status()
     
-    # Render the config panel and capture user action
-    action_result = render_config_panel(is_connected, all_configurations, active_config_name, global_settings)
+    # Tealium Data
+    all_tealium_configs = get_all_configurations()
+    active_tealium_config = get_active_configuration_details()
+    active_tealium_config_name = active_tealium_config.get("name") if active_tealium_config else None
+    is_tealium_connected = get_tealium_connection_status()
 
+    # Adobe Data
+    all_adobe_configs = get_all_adobe_configurations()
+    active_adobe_config = get_active_adobe_configuration_details()
+    active_adobe_config_name = active_adobe_config.get("name") if active_adobe_config else None
+    is_adobe_connected = get_adobe_connection_status()
+
+    # --- Render the unified config panel ---
+    action_result = render_config_panel(
+        is_tealium_connected=is_tealium_connected,
+        is_adobe_connected=is_adobe_connected,
+        all_tealium_configs=all_tealium_configs,
+        all_adobe_configs=all_adobe_configs,
+        active_tealium_config_name=active_tealium_config_name,
+        active_adobe_config_name=active_adobe_config_name,
+        global_settings=global_settings
+    )
+
+    # --- Process action from the panel ---
     if action_result["action"]:
         action = action_result["action"]
-        data = action_result["data"]
+        data = action_result.get("data", {})
         
         with st.spinner("Traitement..."):
+            # Global settings
             if action == "save_global":
                 handle_save_global_settings(data)
                 st.success("Paramètres globaux enregistrés.")
+            
+            # Tealium actions
             elif action == "add_new":
                 if handle_add_new_config(data):
-                    st.success(f"Profil '{data['name']}' ajouté.")
+                    st.success(f"Profil Tealium '{data['name']}' ajouté.")
                 else:
-                    st.error(f"Erreur lors de l'ajout du profil '{data['name']}'.")
+                    st.error(f"Erreur lors de l'ajout du profil Tealium '{data['name']}'.")
             elif action == "update":
                 if handle_update_config(data):
-                    st.success(f"Profil '{data['name']}' mis à jour.")
+                    st.success(f"Profil Tealium '{data['name']}' mis à jour.")
             elif action == "set_active":
                 if handle_set_active_config(data["name"]):
-                    st.success(f"'{data['name']}' est maintenant le profil actif et la connexion est réussie.")
+                    st.success(f"'{data['name']}' est maintenant le profil Tealium actif et la connexion est réussie.")
                 else:
                     st.error(f"'{data['name']}' a été défini comme actif, mais la connexion a échoué.")
             elif action == "delete":
                 handle_delete_config(data["name"])
-                st.success(f"Profil '{data['name']}' supprimé.")
+                st.success(f"Profil Tealium '{data['name']}' supprimé.")
             elif action == "download":
-                st.session_state['download_status'] = {
-                    "name": data["name"],
-                    "success": handle_download_profile(data["name"])
-                }
+                st.session_state['download_status'] = {"name": data["name"], "success": handle_download_profile(data["name"])}
+            
+            # Adobe actions
+            elif action == "add_new_adobe":
+                if handle_add_new_adobe_config(data):
+                    st.success(f"Configuration Adobe '{data['name']}' ajoutée.")
+                else:
+                    st.error(f"Erreur lors de l'ajout de la configuration Adobe '{data['name']}'.")
+            elif action == "set_active_adobe":
+                if handle_set_active_adobe_config(data["name"]):
+                    st.success(f"'{data['name']}' est maintenant la configuration Adobe active et la connexion est réussie.")
+                else:
+                    st.error(f"'{data['name']}' a été définie comme active, mais la connexion a échoué.")
+            elif action == "delete_adobe":
+                handle_delete_adobe_config(data["name"])
+                st.success(f"Configuration Adobe '{data['name']}' supprimée.")
 
-        
         st.rerun()
 
 elif st.session_state.page == "profile_explorer":
@@ -288,15 +331,12 @@ elif st.session_state.page == "profile_explorer":
     if not active_config_details:
         st.warning("Veuillez sélectionner et activer une configuration Tealium pour explorer un profil.")
     else:
-        # Initialize session state for version selection
         if 'selected_version' not in st.session_state:
             st.session_state.selected_version = "latest"
 
-        # Fetch data for the selected version
         version_to_load = st.session_state.selected_version if st.session_state.selected_version != "latest" else None
         profile_response = get_profile_data(version_id=version_to_load)
 
-        # Handle potential errors first
         if profile_response.get("error"):
             st.error(f"**Échec du chargement des données de profil.**")
             st.info(f"Message : {profile_response.get('message', 'Erreur inconnue.')}")
@@ -306,20 +346,16 @@ elif st.session_state.page == "profile_explorer":
                 with st.expander("Voir la réponse complète de l'API"):
                     st.json(profile_response["body"])
         
-        # If successful, display the version selector and the data
         elif profile_response.get("data"):
             profile_data = profile_response.get("data", {}).get("profile", {})
             version_ids = ["latest"] + profile_data.get("versionIds", [])
             
-            # Find the index of the currently loaded version for the selectbox default
             current_version = profile_data.get("version")
             try:
-                # If a specific version was loaded, find it. Otherwise, default to 'latest'.
                 current_index = version_ids.index(current_version) if version_to_load else 0
             except ValueError:
                 current_index = 0
 
-            # Display the version selector
             selected = st.selectbox(
                 "Choisissez une version de profil à explorer :",
                 options=version_ids,
@@ -327,12 +363,10 @@ elif st.session_state.page == "profile_explorer":
                 key="version_selector"
             )
             
-            # If selection changes, update session state and rerun
             if selected != st.session_state.selected_version:
                 st.session_state.selected_version = selected
                 st.rerun()
 
-            # Render the explorer with the loaded data
             render_profile_explorer(profile_response.get("data"))
         else:
             st.error("Une erreur inattendue est survenue : aucune donnée reçue.")
@@ -355,6 +389,8 @@ elif st.session_state.page == "mapping_checker":
     render_mapping_checker_view()
 elif st.session_state.page == "profile_comparison":
     render_profile_comparison_page()
+elif st.session_state.page == "adobe_dashboard":
+    render_adobe_dashboard_view()
 elif st.session_state.page == "comparison":
     st.subheader("Comparaison de MEPs")
     if 'meps_to_compare' in st.session_state and len(st.session_state.meps_to_compare) == 2:

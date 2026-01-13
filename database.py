@@ -70,6 +70,23 @@ def initialize_database():
             etag TEXT
         )
     """)
+
+    # Table for storing Adobe Analytics configurations
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS adobe_configurations (
+            name TEXT PRIMARY KEY,
+            auth_method TEXT NOT NULL DEFAULT 'jwt',
+            global_company_id TEXT,
+            api_key TEXT,
+            client_secret TEXT,
+            technical_account_id TEXT,
+            organization_id TEXT,
+            private_key TEXT,
+            manual_access_token TEXT,
+            is_active BOOLEAN DEFAULT 0
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -123,7 +140,7 @@ def load_global_settings() -> Dict[str, str]:
             
     return defaults
 
-# --- Configuration Management Functions ---
+# --- Tealium Configuration Management Functions ---
 
 def save_configuration(name: str, account: str, profile: str, is_active: bool = False):
     """Saves or updates a Tealium profile configuration."""
@@ -137,7 +154,7 @@ def save_configuration(name: str, account: str, profile: str, is_active: bool = 
     conn.close()
 
 def load_all_configurations() -> List[Dict[str, str]]:
-    """Loads all saved configurations."""
+    """Loads all saved Tealium configurations."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT name, account, profile, is_active FROM configurations")
@@ -146,7 +163,7 @@ def load_all_configurations() -> List[Dict[str, str]]:
     return [dict(row) for row in rows]
 
 def get_active_configuration() -> Optional[Dict[str, str]]:
-    """Gets the currently active configuration, including global settings."""
+    """Gets the currently active Tealium configuration, including global settings."""
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -166,7 +183,7 @@ def get_active_configuration() -> Optional[Dict[str, str]]:
     return global_settings if global_settings else None
 
 def set_active_configuration(name: str):
-    """Sets a specific configuration as active."""
+    """Sets a specific Tealium configuration as active."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("UPDATE configurations SET is_active = 0")
@@ -175,12 +192,75 @@ def set_active_configuration(name: str):
     conn.close()
 
 def delete_configuration(name: str):
-    """Deletes a configuration and its associated caches."""
+    """Deletes a Tealium configuration and its associated caches."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM configurations WHERE name = ?", (name,))
     cursor.execute("DELETE FROM profile_cache WHERE config_name = ?", (name,))
     # Also potentially clear related items from the generic api_cache if needed, though not strictly enforced by schema
+    conn.commit()
+    conn.close()
+
+# --- Adobe Analytics Configuration Management Functions ---
+
+def save_adobe_configuration(config: Dict):
+    """Saves or updates an Adobe Analytics configuration."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Define all possible fields to ensure we handle missing ones gracefully
+    fields = [
+        'name', 'auth_method', 'global_company_id', 'api_key', 'client_secret',
+        'technical_account_id', 'organization_id', 'private_key', 
+        'manual_access_token', 'is_active'
+    ]
+    
+    # Prepare data tuple, using None for missing keys
+    data_tuple = tuple(config.get(field) for field in fields)
+    
+    # Using 'INSERT OR REPLACE' based on the primary key 'name'
+    cursor.execute(
+        f"""INSERT OR REPLACE INTO adobe_configurations ({', '.join(fields)}) 
+            VALUES ({', '.join(['?'] * len(fields))})""",
+        data_tuple
+    )
+    conn.commit()
+    conn.close()
+
+def load_all_adobe_configurations() -> List[Dict[str, str]]:
+    """Loads all saved Adobe Analytics configurations."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    # Exclude sensitive fields from the main list view
+    cursor.execute("SELECT name, auth_method, global_company_id, api_key, technical_account_id, organization_id, is_active FROM adobe_configurations")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def get_active_adobe_configuration() -> Optional[Dict[str, str]]:
+    """Gets the currently active Adobe Analytics configuration."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM adobe_configurations WHERE is_active = 1")
+    active_config_row = cursor.fetchone()
+    conn.close()
+    return dict(active_config_row) if active_config_row else None
+
+def set_active_adobe_configuration(name: str):
+    """Sets a specific Adobe Analytics configuration as active."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE adobe_configurations SET is_active = 0")
+    cursor.execute("UPDATE adobe_configurations SET is_active = 1 WHERE name = ?", (name,))
+    conn.commit()
+    conn.close()
+
+def delete_adobe_configuration(name: str):
+    """Deletes an Adobe Analytics configuration."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM adobe_configurations WHERE name = ?", (name,))
     conn.commit()
     conn.close()
 
@@ -252,6 +332,8 @@ def get_db_status() -> Dict:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM configurations")
         config_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM adobe_configurations")
+        adobe_config_count = cursor.fetchone()[0]
         cursor.execute("SELECT COUNT(*) FROM profile_cache")
         profile_cache_count = cursor.fetchone()[0]
         cursor.execute("SELECT COUNT(*) FROM api_cache")
@@ -263,6 +345,7 @@ def get_db_status() -> Dict:
             "file_size_bytes": file_size_bytes,
             "last_modified": last_modified_datetime,
             "configurations_count": config_count,
+            "adobe_configurations_count": adobe_config_count,
             "cached_items_count": profile_cache_count + api_cache_count
         }
     except Exception as e:
@@ -281,3 +364,4 @@ def reset_database():
 
 # Initialize the database on startup
 initialize_database()
+
