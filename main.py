@@ -20,10 +20,12 @@ from controllers.config_controller import (
     handle_database_reset,
     get_all_adobe_configurations,
     get_active_adobe_configuration_details,
+    get_adobe_config_details_by_name,
     get_adobe_connection_status,
     handle_add_new_adobe_config,
     handle_set_active_adobe_config,
-    handle_delete_adobe_config
+    handle_delete_adobe_config,
+    test_adobe_discovery
 )
 from views.adobe_dashboard_view import render_adobe_dashboard_view
 from controllers.profile_controller import get_profile_data
@@ -251,6 +253,10 @@ if st.session_state.page == "home":
 elif st.session_state.page == "config":
     st.title("Gestion des Configurations")
     
+    # --- Initialize session state for editing ---
+    if 'adobe_config_to_edit' not in st.session_state:
+        st.session_state.adobe_config_to_edit = None
+
     # --- Load all data from controller ---
     global_settings = get_global_settings()
     
@@ -274,7 +280,8 @@ elif st.session_state.page == "config":
         all_adobe_configs=all_adobe_configs,
         active_tealium_config_name=active_tealium_config_name,
         active_adobe_config_name=active_adobe_config_name,
-        global_settings=global_settings
+        global_settings=global_settings,
+        adobe_config_to_edit=st.session_state.adobe_config_to_edit
     )
 
     # --- Process action from the panel ---
@@ -309,11 +316,17 @@ elif st.session_state.page == "config":
                 st.session_state['download_status'] = {"name": data["name"], "success": handle_download_profile(data["name"])}
             
             # Adobe actions
-            elif action == "add_new_adobe":
+            elif action == "save_adobe_config":
                 if handle_add_new_adobe_config(data):
-                    st.success(f"Configuration Adobe '{data['name']}' ajoutée.")
+                    st.success(f"Configuration Adobe '{data['name']}' enregistrée.")
+                    st.session_state.adobe_config_to_edit = None # Exit edit mode on success
                 else:
-                    st.error(f"Erreur lors de l'ajout de la configuration Adobe '{data['name']}'.")
+                    st.error(f"Erreur lors de l'enregistrement de la configuration Adobe '{data['name']}'.")
+            elif action == "edit_adobe":
+                # Fetch full config details and store in session state to enter edit mode
+                st.session_state.adobe_config_to_edit = get_adobe_config_details_by_name(data["name"])
+            elif action == "cancel_edit_adobe":
+                st.session_state.adobe_config_to_edit = None
             elif action == "set_active_adobe":
                 if handle_set_active_adobe_config(data["name"]):
                     st.success(f"'{data['name']}' est maintenant la configuration Adobe active et la connexion est réussie.")
@@ -322,6 +335,12 @@ elif st.session_state.page == "config":
             elif action == "delete_adobe":
                 handle_delete_adobe_config(data["name"])
                 st.success(f"Configuration Adobe '{data['name']}' supprimée.")
+                # If we deleted the config being edited, exit edit mode
+                if st.session_state.adobe_config_to_edit and st.session_state.adobe_config_to_edit['name'] == data["name"]:
+                    st.session_state.adobe_config_to_edit = None
+
+            elif action == "test_adobe_discovery":
+                st.session_state['adobe_discovery_result'] = test_adobe_discovery()
 
         st.rerun()
 

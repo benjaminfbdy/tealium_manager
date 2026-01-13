@@ -99,3 +99,19 @@ This will start the Streamlit server, and you can access the application in your
     *   **API Client (`adobe_client.py`)**: Le client est maintenant capable de gérer les deux modes. La méthode `_ensure_token` a été modifiée pour soit utiliser le token manuel, soit déclencher le flux de rafraîchissement JWT.
     *   **UI/UX (`config_view.py`)**: L'interface de configuration affiche dynamiquement les champs de saisie pertinents en fonction du mode d'authentification choisi par l'utilisateur via un bouton radio, améliorant l'expérience utilisateur.
 *   **Dette Technique**: Aucune nouvelle dette significative. Cette modification rend au contraire le système plus flexible et plus facile à maintenir ou à faire évoluer (par exemple, pour supporter OAuth 2.0 à l'avenir).
+
+## [Sprint 8] - Optimisation des Performances Adobe Dashboard
+
+**👔 Vue Métier**: Améliorer significativement la réactivité du Dashboard Adobe. Le chargement des composants (dimensions, métriques, segments) pour une suite de rapports est maintenant quasi-instantané après le premier chargement. L'utilisateur n'a plus à attendre plusieurs secondes à chaque fois qu'il sélectionne une suite de rapports, rendant l'exploration beaucoup plus fluide. Il peut également forcer la mise à jour des composants depuis la page de configuration si nécessaire.
+
+**⚙️ Vue Technique**:
+*   **Architecture**:
+    *   **Mise en Cache des Composants Adobe**: Une nouvelle table `adobe_components` a été ajoutée à `database.py`. Elle stocke les listes de dimensions, métriques et segments sous forme de JSON, associées à une `rsid` (Report Suite ID) et un timestamp de dernière mise à jour.
+    *   **Logique de Cache dans le Client API**: La responsabilité de la mise en cache a été centralisée dans `utils/adobe_client.py`. La méthode `get_adobe_dashboard_components` a été mise à jour pour :
+        1.  Tenter de charger les composants depuis la base de données via `load_adobe_components`.
+        2.  Si les données sont trouvées et qu'un rafraîchissement n'est pas forcé, les retourner immédiatement.
+        3.  Sinon, appeler l'API Adobe pour récupérer les données fraîches.
+        4.  Sauvegarder ces nouvelles données dans la base de données avec `save_adobe_components` avant de les retourner.
+    *   **Interface de Gestion du Cache**: La vue `views/config_view.py` a été dotée d'une section "Gestion du Cache des Composants Adobe". Elle liste toutes les suites de rapports en cache avec leur date de dernière mise à jour et propose un bouton "Rafraîchir" qui appelle la logique de rafraîchissement forcé.
+    *   **Simplification du Contrôleur**: Le contrôleur `controllers/adobe_controller.py` a été simplifié. Sa fonction `get_or_refresh_components` agit désormais comme un simple passe-plat vers le client, déléguant entièrement la gestion du cache.
+*   **Dette Technique**: Aucune. Cette évolution est une optimisation propre qui réduit la charge sur l'API Adobe, améliore l'UX et renforce la séparation des responsabilités entre le client (gestion des données) et le contrôleur (orchestration).

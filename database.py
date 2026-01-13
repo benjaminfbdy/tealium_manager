@@ -87,6 +87,34 @@ def initialize_database():
         )
     """)
 
+    # --- Schema Migration for adobe_configurations ---
+    cursor.execute("PRAGMA table_info(adobe_configurations)")
+    adobe_columns = [row['name'] for row in cursor.fetchall()]
+
+    if 'auth_method' not in adobe_columns:
+        print("MIGRATING SCHEMA: Adding 'auth_method' to 'adobe_configurations' table.")
+        cursor.execute("ALTER TABLE adobe_configurations ADD COLUMN auth_method TEXT")
+    if 'client_secret' not in adobe_columns:
+        print("MIGRATING SCHEMA: Adding 'client_secret' to 'adobe_configurations' table.")
+        cursor.execute("ALTER TABLE adobe_configurations ADD COLUMN client_secret TEXT")
+    if 'private_key' not in adobe_columns:
+        print("MIGRATING SCHEMA: Adding 'private_key' to 'adobe_configurations' table.")
+        cursor.execute("ALTER TABLE adobe_configurations ADD COLUMN private_key TEXT")
+    if 'manual_access_token' not in adobe_columns:
+        print("MIGRATING SCHEMA: Adding 'manual_access_token' to 'adobe_configurations' table.")
+        cursor.execute("ALTER TABLE adobe_configurations ADD COLUMN manual_access_token TEXT")
+
+    # Table for caching Adobe Analytics components per RSID
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS adobe_components (
+            rsid TEXT PRIMARY KEY,
+            dimensions TEXT NOT NULL,
+            metrics TEXT NOT NULL,
+            segments TEXT NOT NULL,
+            last_updated REAL NOT NULL
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -215,9 +243,17 @@ def save_adobe_configuration(config: Dict):
         'manual_access_token', 'is_active'
     ]
     
-    # Prepare data tuple, using None for missing keys
-    data_tuple = tuple(config.get(field) for field in fields)
-    
+    # Prepare data tuple. For text fields that might have a NOT NULL constraint
+    # in older schemas, use an empty string '' instead of None.
+    data_values = []
+    for field in fields:
+        value = config.get(field)
+        if value is None and field in ['technical_account_id', 'organization_id', 'private_key']:
+            data_values.append('')
+        else:
+            data_values.append(value)
+    data_tuple = tuple(data_values)
+
     # Using 'INSERT OR REPLACE' based on the primary key 'name'
     cursor.execute(
         f"""INSERT OR REPLACE INTO adobe_configurations ({', '.join(fields)}) 
@@ -239,13 +275,38 @@ def load_all_adobe_configurations() -> List[Dict[str, str]]:
 
 
 def get_active_adobe_configuration() -> Optional[Dict[str, str]]:
-    """Gets the currently active Adobe Analytics configuration."""
+    """Gets the currently active Adobe Analytics configuration, including global proxy settings."""
     conn = get_db_connection()
     cursor = conn.cursor()
+    
+    global_settings = load_global_settings()
+
     cursor.execute("SELECT * FROM adobe_configurations WHERE is_active = 1")
     active_config_row = cursor.fetchone()
+    
     conn.close()
-    return dict(active_config_row) if active_config_row else None
+
+    if active_config_row:
+        # Convert row to a mutable dictionary
+        active_config = dict(active_config_row)
+        # Merge global settings. Adobe config values take precedence if keys conflict.
+        # Create a copy of global_settings to avoid modifying it, then update
+        merged_config = global_settings.copy()
+        merged_config.update(active_config)
+        return merged_config
+    
+    # If no active Adobe config, there's no combined config to return.
+    # Unlike the Tealium one, we don't return just globals as it's not a valid Adobe config.
+    return None
+
+def load_adobe_configuration_by_name(name: str) -> Optional[Dict[str, str]]:
+    """Gets a single, full Adobe Analytics configuration by its unique name."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM adobe_configurations WHERE name = ?", (name,))
+    config_row = cursor.fetchone()
+    conn.close()
+    return dict(config_row) if config_row else None
 
 def set_active_adobe_configuration(name: str):
     """Sets a specific Adobe Analytics configuration as active."""
@@ -264,7 +325,52 @@ def delete_adobe_configuration(name: str):
     conn.commit()
     conn.close()
 
-# --- Caching Functions ---
+# --- Adobe Components Caching Functions ---
+
+def save_adobe_components(rsid: str, components: Dict):
+    """Saves or updates the components for a given RSID in the cache."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """INSERT OR REPLACE INTO adobe_components (rsid, dimensions, metrics, segments, last_updated)
+           VALUES (?, ?, ?, ?, ?)""",
+        (
+            rsid,
+            json.dumps(components.get('dimensions', [])),
+            json.dumps(components.get('metrics', [])),
+            json.dumps(components.get('segments', [])),
+            time.time()
+        )
+    )
+    conn.commit()
+    conn.close()
+
+def load_adobe_components(rsid: str) -> Optional[Dict]:
+    """Loads cached components for a given RSID."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT dimensions, metrics, segments, last_updated FROM adobe_components WHERE rsid = ?", (rsid,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return {
+            "dimensions": json.loads(row["dimensions"]),
+            "metrics": json.loads(row["metrics"]),
+            "segments": json.loads(row["segments"]),
+            "last_updated": row["last_updated"]
+        }
+    return None
+
+def get_adobe_components_cache_info() -> List[Dict]:
+    """Retrieves a list of all cached RSIDs and their last update timestamp."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT rsid, last_updated FROM adobe_components")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+# --- Caching Functions (Legacy/Generic) ---
 
 def get_cached_data(cache_key: str, ttl: int = 3600) -> Optional[Dict]:
     """Retrieves generic cached data if it exists and is not older than the TTL."""
@@ -304,6 +410,7 @@ def cache_profile_data(config_name: str, data: Dict):
 
 def get_cached_profile(config_name: str) -> (Optional[Dict], Optional[float]):
     """
+
     Retrieves a cached LATEST profile and its timestamp by its configuration name.
     Returns (data, timestamp) or (None, None).
     """
@@ -338,6 +445,8 @@ def get_db_status() -> Dict:
         profile_cache_count = cursor.fetchone()[0]
         cursor.execute("SELECT COUNT(*) FROM api_cache")
         api_cache_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM adobe_components")
+        adobe_components_count = cursor.fetchone()[0]
         conn.close()
 
         return {
@@ -346,7 +455,8 @@ def get_db_status() -> Dict:
             "last_modified": last_modified_datetime,
             "configurations_count": config_count,
             "adobe_configurations_count": adobe_config_count,
-            "cached_items_count": profile_cache_count + api_cache_count
+            "cached_items_count": profile_cache_count + api_cache_count,
+            "cached_adobe_components_count": adobe_components_count,
         }
     except Exception as e:
         return {"status": "Error", "message": str(e)}
@@ -364,4 +474,3 @@ def reset_database():
 
 # Initialize the database on startup
 initialize_database()
-

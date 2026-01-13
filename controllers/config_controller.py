@@ -4,11 +4,13 @@ from database import (
     save_configuration, load_all_configurations, get_active_configuration, 
     set_active_configuration, delete_configuration,
     save_adobe_configuration, load_all_adobe_configurations, get_active_adobe_configuration,
+    load_adobe_configuration_by_name,
     set_active_adobe_configuration, delete_adobe_configuration,
     get_db_status, reset_database,
     save_global_settings, load_global_settings, cache_profile_data
 )
 from typing import Dict, List, Optional
+from urllib.parse import quote
 
 # --- Helper Functions ---
 
@@ -19,8 +21,10 @@ def _create_proxies_dict(settings: Dict) -> Optional[Dict]:
     if proxy_user and proxy_password:
         proxy_host = "proxy-users.intranet.bpce-it.fr"
         proxy_port = "8080"
-        proxy_url_base = f"{proxy_host}:{proxy_port}"
-        proxy_auth_url = f"http://{proxy_user}:{proxy_password}@{proxy_url_base}"
+        # URL-encode user and password to handle special characters
+        encoded_user = quote(proxy_user)
+        encoded_password = quote(proxy_password)
+        proxy_auth_url = f"http://{encoded_user}:{encoded_password}@{proxy_host}:{proxy_port}"
         return {"http": proxy_auth_url, "https": proxy_auth_url}
     return None
 
@@ -33,10 +37,10 @@ def get_global_settings() -> Dict[str, str]:
 def handle_save_global_settings(settings: Dict[str, str]):
     """Saves the global settings (API key, email, proxy)."""
     save_global_settings(
-        settings.get("api_key", ""), 
-        settings.get("email", ""),
-        settings.get("proxy_user", ""),
-        settings.get("proxy_password", "")
+        api_key=settings.get("api_key", "").strip(), 
+        email=settings.get("email", "").strip(),
+        proxy_user=settings.get("proxy_user", "").strip(),
+        proxy_password=settings.get("proxy_password", "").strip() # Passwords may sometimes have spaces, but usually not leading/trailing
     )
 
 # --- Tealium Configuration ---
@@ -75,9 +79,10 @@ def get_tealium_connection_status() -> bool:
 
 def handle_add_new_config(config_data: Dict[str, str]) -> bool:
     """Saves a new Tealium profile configuration."""
-    name = config_data.get("name")
-    account = config_data.get("account")
-    profile = config_data.get("profile")
+    # Strip whitespace from inputs
+    name = config_data.get("name", "").strip()
+    account = config_data.get("account", "").strip()
+    profile = config_data.get("profile", "").strip()
 
     if not all([name, account, profile]):
         print("Error: All fields for new Tealium configuration must be provided.")
@@ -93,9 +98,10 @@ def handle_add_new_config(config_data: Dict[str, str]) -> bool:
 def handle_update_config(config_data: Dict[str, str]) -> bool:
     """Updates an existing Tealium profile configuration."""
     # This function is not fully utilized in the current UI but is kept for future use.
-    name = config_data.get("name")
-    account = config_data.get("account")
-    profile = config_data.get("profile")
+    # Strip whitespace from inputs
+    name = config_data.get("name", "").strip() # Name is disabled in UI, but good practice
+    account = config_data.get("account", "").strip()
+    profile = config_data.get("profile", "").strip()
 
     if not all([name, account, profile]):
         return False
@@ -135,6 +141,10 @@ def get_active_adobe_configuration_details() -> Optional[Dict[str, str]]:
     """Loads the details of the active Adobe Analytics configuration."""
     return get_active_adobe_configuration()
 
+def get_adobe_config_details_by_name(name: str) -> Optional[Dict[str, str]]:
+    """Loads the full details of a specific Adobe configuration by name."""
+    return load_adobe_configuration_by_name(name)
+
 def get_adobe_connection_status() -> bool:
     """
     Attempts to initialize AdobeAnalyticsClient and get a token.
@@ -153,33 +163,41 @@ def get_adobe_connection_status() -> bool:
 
 def handle_add_new_adobe_config(config_data: Dict[str, str]) -> bool:
     """Saves a new Adobe Analytics configuration after validating based on auth method."""
-    auth_method = config_data.get("auth_method")
+    # Strip leading/trailing whitespace from all string values to prevent issues.
+    stripped_config = {k: v.strip() if isinstance(v, str) else v for k, v in config_data.items()}
+
+    auth_method = stripped_config.get("auth_method")
     
     # Basic validation for common fields
-    if not all(config_data.get(k) for k in ["name", "api_key", "global_company_id"]):
+    # Use the stripped data for validation
+    if not all(stripped_config.get(k) for k in ["name", "api_key", "global_company_id"]):
         print("Error: Name, API Key, and Global Company ID are always required.")
         return False
         
     # Method-specific validation
-    if auth_method == 'jwt':
+    if auth_method == 'oauth':
+        if not stripped_config.get("client_secret"):
+            print("Error: For OAuth auth, the Client Secret is required.")
+            return False
+    elif auth_method == 'jwt':
         required_keys = ["client_secret", "technical_account_id", "organization_id", "private_key"]
-        if not all(config_data.get(k) for k in required_keys):
+        if not all(stripped_config.get(k) for k in required_keys):
             print("Error: For JWT auth, all secret and ID fields are required.")
             return False
     elif auth_method == 'manual':
-        if not config_data.get("manual_access_token"):
+        if not stripped_config.get("manual_access_token"):
             print("Error: For Manual Token auth, the Access Token is required.")
             return False
-    else:
+    elif auth_method not in ['oauth', 'jwt', 'manual']:
         print(f"Error: Unknown auth method '{auth_method}'.")
         return False
 
-    # The save function is designed to handle the flexible dict
-    save_adobe_configuration(config_data)
+    # Save the cleaned data
+    save_adobe_configuration(stripped_config)
     
     all_configs = load_all_adobe_configurations()
     if len(all_configs) == 1:
-        set_active_adobe_configuration(config_data["name"])
+        set_active_adobe_configuration(stripped_config["name"])
     return True
 
 def handle_set_active_adobe_config(name: str) -> bool:
@@ -250,4 +268,20 @@ def get_database_status() -> Dict:
 def handle_database_reset() -> bool:
     """Handles the request to reset the database."""
     return reset_database()
+
+def test_adobe_discovery() -> Dict:
+    """
+    Calls the Adobe discovery/me endpoint to fetch user/service details.
+    """
+    active_config = get_active_adobe_configuration()
+    if not active_config:
+        return {"error": "No active Adobe configuration found."}
+
+    try:
+        client = AdobeAnalyticsClient(active_config)
+        discovery_info = client.discover_me()
+        return discovery_info
+    except Exception as e:
+        print(f"Error during Adobe discovery test: {e}")
+        return {"error": str(e)}
 
