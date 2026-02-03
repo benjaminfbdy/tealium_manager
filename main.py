@@ -28,6 +28,7 @@ from controllers.config_controller import (
     test_adobe_discovery
 )
 from views.adobe_dashboard_view import render_adobe_dashboard_view
+from views.adobe_reports_view import render_adobe_reports_view
 from controllers.profile_controller import get_profile_data
 from controllers.mep_controller import get_meps_data, get_mep_comparison_data
 
@@ -131,8 +132,10 @@ if st.sidebar.button("Comparaison de Profils"):
 
 st.sidebar.divider()
 st.sidebar.subheader("Adobe Analytics")
-if st.sidebar.button("Dashboard"):
+if st.sidebar.button("Requeteur"):
     st.session_state.page = "adobe_dashboard"
+if st.sidebar.button("Rapports"):
+    st.session_state.page = "adobe_reports"
 
 
 # --- Database Management in Sidebar ---
@@ -181,6 +184,9 @@ with st.sidebar.expander("⚙️ Gestion Base de Données", expanded=False):
             if st.button("Annuler", key="reset_cancel", use_container_width=True):
                 st.session_state.confirm_reset = False
                 st.rerun()
+
+st.sidebar.divider()
+st.sidebar.caption("🚀 Tealium Manager v0.7-alpha (Branch: alpha7)")
 
 
 if st.session_state.page == "home":
@@ -410,6 +416,8 @@ elif st.session_state.page == "profile_comparison":
     render_profile_comparison_page()
 elif st.session_state.page == "adobe_dashboard":
     render_adobe_dashboard_view()
+elif st.session_state.page == "adobe_reports":
+    render_adobe_reports_view()
 elif st.session_state.page == "comparison":
     st.subheader("Comparaison de MEPs")
     if 'meps_to_compare' in st.session_state and len(st.session_state.meps_to_compare) == 2:

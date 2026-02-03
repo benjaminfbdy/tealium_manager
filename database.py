@@ -115,6 +115,50 @@ def initialize_database():
         )
     """)
 
+    # Table for storing Saved Report Configurations (Sprint 9)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS saved_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            adobe_config_name TEXT NOT NULL,
+            rsid TEXT NOT NULL,
+            definition TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            FOREIGN KEY (adobe_config_name) REFERENCES adobe_configurations (name) ON DELETE CASCADE
+        )
+    """)
+
+    # --- Schema Migration for saved_reports ---
+    cursor.execute("PRAGMA table_info(saved_reports)")
+    saved_reports_columns = [row['name'] for row in cursor.fetchall()]
+
+    # --- FIX: Detect and clean up legacy/WIP schema ---
+    if 'metrics' in saved_reports_columns:
+        print("MIGRATING SCHEMA: Detected legacy 'saved_reports' table (WIP schema). Recreating table...")
+        cursor.execute("DROP TABLE saved_reports")
+        cursor.execute("""
+            CREATE TABLE saved_reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                adobe_config_name TEXT NOT NULL,
+                rsid TEXT NOT NULL,
+                definition TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                FOREIGN KEY (adobe_config_name) REFERENCES adobe_configurations (name) ON DELETE CASCADE
+            )
+        """)
+        # Refresh columns list after recreation
+        cursor.execute("PRAGMA table_info(saved_reports)")
+        saved_reports_columns = [row['name'] for row in cursor.fetchall()]
+
+    if saved_reports_columns and 'created_at' not in saved_reports_columns:
+        print("MIGRATING SCHEMA: Adding 'created_at' to 'saved_reports' table.")
+        cursor.execute("ALTER TABLE saved_reports ADD COLUMN created_at REAL DEFAULT 0")
+
+    if saved_reports_columns and 'definition' not in saved_reports_columns:
+        print("MIGRATING SCHEMA: Adding 'definition' to 'saved_reports' table.")
+        cursor.execute("ALTER TABLE saved_reports ADD COLUMN definition TEXT DEFAULT '{}'")
+
     conn.commit()
     conn.close()
 
@@ -370,6 +414,47 @@ def get_adobe_components_cache_info() -> List[Dict]:
     conn.close()
     return [dict(row) for row in rows]
 
+# --- Saved Reports Functions (Sprint 9) ---
+
+def save_report_configuration(name: str, adobe_config_name: str, rsid: str, definition: Dict):
+    """Saves a report configuration."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO saved_reports (name, adobe_config_name, rsid, definition, created_at) VALUES (?, ?, ?, ?, ?)",
+        (name, adobe_config_name, rsid, json.dumps(definition), time.time())
+    )
+    conn.commit()
+    conn.close()
+
+def load_saved_reports() -> List[Dict]:
+    """Loads all saved reports."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM saved_reports ORDER BY created_at DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def update_saved_report(report_id: int, name: str, adobe_config_name: str, rsid: str, definition: Dict):
+    """Updates an existing report configuration."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE saved_reports SET name = ?, adobe_config_name = ?, rsid = ?, definition = ? WHERE id = ?",
+        (name, adobe_config_name, rsid, json.dumps(definition), report_id)
+    )
+    conn.commit()
+    conn.close()
+
+def delete_saved_report(report_id: int):
+    """Deletes a saved report by ID."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM saved_reports WHERE id = ?", (report_id,))
+    conn.commit()
+    conn.close()
+
 # --- Caching Functions (Legacy/Generic) ---
 
 def get_cached_data(cache_key: str, ttl: int = 3600) -> Optional[Dict]:
@@ -447,6 +532,8 @@ def get_db_status() -> Dict:
         api_cache_count = cursor.fetchone()[0]
         cursor.execute("SELECT COUNT(*) FROM adobe_components")
         adobe_components_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM saved_reports")
+        saved_reports_count = cursor.fetchone()[0]
         conn.close()
 
         return {
@@ -457,6 +544,7 @@ def get_db_status() -> Dict:
             "adobe_configurations_count": adobe_config_count,
             "cached_items_count": profile_cache_count + api_cache_count,
             "cached_adobe_components_count": adobe_components_count,
+            "saved_reports_count": saved_reports_count
         }
     except Exception as e:
         return {"status": "Error", "message": str(e)}

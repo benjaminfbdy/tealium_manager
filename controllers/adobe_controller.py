@@ -1,9 +1,9 @@
 import pandas as pd
 from typing import Dict, List, Optional, Any
-from database import get_active_adobe_configuration
+from database import get_active_adobe_configuration, save_report_configuration, update_saved_report, load_saved_reports, delete_saved_report, load_adobe_configuration_by_name, load_global_settings
 from utils.adobe_client import AdobeAnalyticsClient
 
-def get_or_refresh_components(rsid: str, force_refresh: bool = False) -> (Optional[Dict], Optional[str]):
+def get_or_refresh_components(rsid: str, force_refresh: bool = False, config_name: Optional[str] = None) -> (Optional[Dict], Optional[str]):
     """
     Gets Adobe Analytics components (dimensions, metrics, segments) for a given RSID
     by calling the client, which handles caching internally.
@@ -11,12 +11,25 @@ def get_or_refresh_components(rsid: str, force_refresh: bool = False) -> (Option
     Args:
         rsid (str): The report suite ID.
         force_refresh (bool): If True, the client will bypass its cache.
+        config_name (str, optional): Specific configuration to use. Defaults to active config.
 
     Returns:
         A tuple: (components_dictionary, error_message)
     """
-    print(f"Controller: Requesting components for RSID '{rsid}' (force_refresh: {force_refresh}).")
-    active_config = get_active_adobe_configuration()
+    print(f"Controller: Requesting components for RSID '{rsid}' (force_refresh: {force_refresh}, config: {config_name}).")
+    
+    if config_name:
+        # Load specific config and merge with global settings (proxy)
+        raw_config = load_adobe_configuration_by_name(config_name)
+        if not raw_config:
+            return None, f"Configuration '{config_name}' introuvable."
+        
+        global_settings = load_global_settings()
+        active_config = global_settings.copy()
+        active_config.update(raw_config)
+    else:
+        active_config = get_active_adobe_configuration()
+
     if not active_config:
         return None, "Aucune configuration Adobe active n'est définie pour contacter l'API."
 
@@ -35,12 +48,23 @@ def get_or_refresh_components(rsid: str, force_refresh: bool = False) -> (Option
         print(error_message)
         return None, error_message
 
-def get_report_suites() -> (List[Dict[str, str]], Optional[str]):
+def get_report_suites(config_name: Optional[str] = None) -> (List[Dict[str, str]], Optional[str]):
     """
     Fetches the list of report suites available for the active Adobe configuration.
     Returns a tuple: (list_of_suites, error_message).
     """
-    active_config = get_active_adobe_configuration()
+    if config_name:
+        # Load specific config and merge with global settings (proxy)
+        raw_config = load_adobe_configuration_by_name(config_name)
+        if not raw_config:
+            return [], f"Configuration '{config_name}' introuvable."
+        
+        global_settings = load_global_settings()
+        active_config = global_settings.copy()
+        active_config.update(raw_config)
+    else:
+        active_config = get_active_adobe_configuration()
+
     if not active_config:
         return [], "Aucune configuration Adobe active trouvée."
 
@@ -148,3 +172,206 @@ def run_adobe_report(
     except Exception as e:
         print(f"An error occurred while running the Adobe report: {e}")
         return None
+
+# --- Saved Reports Management ---
+
+def handle_save_report(name: str, adobe_config_name: str, rsid: str, definition: Dict) -> bool:
+    try:
+        save_report_configuration(name, adobe_config_name, rsid, definition)
+        return True
+    except Exception as e:
+        print(f"Error saving report: {e}")
+        return False
+
+def handle_update_report(report_id: int, name: str, adobe_config_name: str, rsid: str, definition: Dict) -> bool:
+    try:
+        update_saved_report(report_id, name, adobe_config_name, rsid, definition)
+        return True
+    except Exception as e:
+        print(f"Error updating report: {e}")
+        return False
+
+def get_all_saved_reports() -> List[Dict]:
+    return load_saved_reports()
+
+def handle_delete_report(report_id: int):
+    delete_saved_report(report_id)
+
+def run_saved_report(report: Dict, date_range: str) -> (Optional[pd.DataFrame], str):
+    """
+    Runs a saved report using its stored configuration.
+    Dynamically switches the active client context to the one saved in the report.
+    """
+    config_name = report['adobe_config_name']
+    config = load_adobe_configuration_by_name(config_name)
+    
+    if not config:
+        return None, f"Configuration Adobe '{config_name}' introuvable."
+
+    import json
+    
+    # Defensive coding: handle missing or empty definition
+    def_str = report.get('definition')
+    if not def_str:
+        return None, "La définition du rapport est vide ou corrompue (colonne manquante)."
+    
+    try:
+        definition = json.loads(def_str)
+    except json.JSONDecodeError:
+        return None, "Le format de la définition du rapport est invalide."
+    
+    try:
+        client = AdobeAnalyticsClient(config)
+        # Reconstruct arguments for the client report
+        # We need to map the definition back to the structure run_adobe_report builds, 
+        # OR just build the report_definition dict directly here.
+        
+        # Let's rebuild the report definition dict manually to be safe
+        metrics = definition.get('metrics', [])
+        granularity = definition.get('granularity', 'day')
+        report_type = definition.get('type', 'dimension') # 'dimension' or 'segment'
+        
+        # Fallback/Inference: If 'segments' list exists, it's a Segment Comparison report
+        if definition.get('segments') and isinstance(definition['segments'], list) and len(definition['segments']) > 0:
+            report_type = 'segment'
+        
+        # Map granularity to time dimension
+        time_dim_map = {
+            'day': 'variables/daterangeday',
+            'week': 'variables/daterangeweek',
+            'month': 'variables/daterangemonth',
+            'year': 'variables/daterangeyear'
+        }
+        time_dimension = time_dim_map.get(granularity, 'variables/daterangeday')
+        
+        global_filters = [{"type": "dateRange", "dateRange": date_range}]
+        
+        # --- Resolve Segment Names ---
+        # We fetch components to map IDs to Names for better readability
+        segment_map = {}
+        if report_type == 'segment' or definition.get('segments'):
+             # We need the config name to load the right cache
+             comps, _ = get_or_refresh_components(report['rsid'], config_name=report['adobe_config_name'])
+             if comps and 'segments' in comps:
+                 segment_map = {s['id']: s['name'] for s in comps['segments']}
+
+        data_rows = []
+        metric_cols = [m.replace('metrics/', '') for m in metrics]
+        metric_names = [m.split('/')[-1] for m in metrics] # Simplified names for columns
+
+        if report_type == 'segment':
+            # Mode: Compare Segments (Rows = Segments)
+            # We run one report per segment to get the totals/metrics for that segment
+            segments = definition.get('segments', [])
+            
+            for seg_id in segments:
+                # Clone filters and add specific segment
+                current_filters = global_filters.copy()
+                current_filters.append({"type": "segment", "segmentId": seg_id})
+                
+                report_def = {
+                    "rsid": report['rsid'],
+                    "globalFilters": current_filters,
+                    "metricContainer": {
+                        "metrics": [{"id": m, "columnId": str(i)} for i, m in enumerate(metrics)]
+                    },
+                    "dimension": time_dimension, # We still need a dimension to get data, usually time
+                    "settings": {"limit": 400} # Fetch full time series to ensure we catch data if present
+                }
+                
+                report_data = client.get_report(report_def)
+                
+                seg_name = segment_map.get(seg_id, seg_id) # Fallback to ID if name not found
+                row_data = {'Segment': seg_name, '_segment_id': seg_id} # Keep ID hidden for logic
+                
+                # Pivot data: Time buckets become columns
+                if report_data and 'rows' in report_data:
+                    for row in report_data['rows']:
+                        date_key = row['value']
+                        for i, col_name in enumerate(metric_cols):
+                            val = row['data'][i] if i < len(row['data']) else 0
+                            try:
+                                val = float(val)
+                            except (ValueError, TypeError):
+                                val = 0.0
+                            
+                            # Column name format: "YYYY-MM-DD (metric)"
+                            col_label = f"{date_key} ({metric_names[i]})" if len(metrics) > 1 else date_key
+                            row_data[col_label] = val
+
+                data_rows.append(row_data)
+            
+            df = pd.DataFrame(data_rows)
+            # Fill NaNs with 0 for missing dates in some segments
+            df.fillna(0, inplace=True)
+            # We keep 'Segment' as a column for display, index will be default
+            return df, "OK"
+
+        else:
+            # Mode: Dimension Breakdown (Rows = Dimension Items, e.g. Pages)
+            target_dimension = definition.get('dimension', time_dimension)
+            
+            # We need a breakdown by time to get columns per granularity
+            # Structure: Dimension -> Breakdown (Time) -> Metrics
+            report_def = {
+                "rsid": report['rsid'],
+                "globalFilters": global_filters,
+                "metricContainer": {
+                    "metrics": [{"id": m, "columnId": str(i)} for i, m in enumerate(metrics)]
+                },
+                "dimension": target_dimension,
+                "settings": {"limit": 50, "dimensionSort": "desc"}, # Top 50 items
+                "breakdowns": [
+                    {
+                        "dimension": time_dimension,
+                        "settings": {"limit": 400} # Cover the date range
+                    }
+                ]
+            }
+            
+            report_data = client.get_report(report_def)
+            
+            if not report_data or 'rows' not in report_data:
+                return pd.DataFrame(), "Aucune donnée."
+
+            for row in report_data.get('rows', []):
+                data_row = {'Item': row['value'], '_item_id': row.get('itemId', row['value'])} 
+                
+                # Iterate over the time breakdown (nested rows)
+                if 'rows' in row:
+                    for date_row in row['rows']:
+                        date_key = date_row['value']
+                        for i, col_name in enumerate(metric_cols):
+                            val = date_row['data'][i] if i < len(date_row['data']) else 0
+                            try:
+                                val = float(val)
+                            except:
+                                val = 0.0
+                            
+                            col_label = f"{date_key} ({metric_names[i]})" if len(metrics) > 1 else date_key
+                            data_row[col_label] = val
+                            
+                data_rows.append(data_row)
+            
+        if not data_rows:
+            return pd.DataFrame(), "Aucune donnée."
+
+        df = pd.DataFrame(data_rows)
+        df.fillna(0, inplace=True)
+        
+        # --- Sort Columns Chronologically ---
+        # Identify metadata columns that should stay at the start
+        meta_cols_order = ['Segment', 'Item', '_segment_id', '_item_id']
+        present_meta = [c for c in meta_cols_order if c in df.columns]
+        
+        # Identify data columns (dates) and sort them
+        data_cols = [c for c in df.columns if c not in present_meta]
+        data_cols.sort() # ISO format YYYY-MM-DD sorts correctly alphabetically
+        
+        # Reorder DataFrame
+        df = df[present_meta + data_cols]
+        
+        return df, "OK"
+
+    except Exception as e:
+        return None, str(e)

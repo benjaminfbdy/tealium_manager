@@ -115,3 +115,26 @@ This will start the Streamlit server, and you can access the application in your
     *   **Interface de Gestion du Cache**: La vue `views/config_view.py` a été dotée d'une section "Gestion du Cache des Composants Adobe". Elle liste toutes les suites de rapports en cache avec leur date de dernière mise à jour et propose un bouton "Rafraîchir" qui appelle la logique de rafraîchissement forcé.
     *   **Simplification du Contrôleur**: Le contrôleur `controllers/adobe_controller.py` a été simplifié. Sa fonction `get_or_refresh_components` agit désormais comme un simple passe-plat vers le client, déléguant entièrement la gestion du cache.
 *   **Dette Technique**: Aucune. Cette évolution est une optimisation propre qui réduit la charge sur l'API Adobe, améliore l'UX et renforce la séparation des responsabilités entre le client (gestion des données) et le contrôleur (orchestration).
+
+## [Sprint 9] - Générateur de Rapports & Batching
+
+**👔 Vue Métier**: Offrir une capacité d'automatisation et de sauvegarde complète.
+*   **Gestion Complète**: Création, **Édition** et Suppression de rapports personnalisés (métriques, dimensions, segments).
+*   **Batching**: Exécution en masse de plusieurs rapports sur différents comptes Adobe en un clic.
+*   **Visualisation**: Tableaux de résultats dynamiques avec ventilation temporelle (Jour/Semaine/Mois) et **génération de courbes de tendance** instantanée au sein du tableau.
+
+**⚙️ Vue Technique**:
+*   **Architecture**:
+    *   **Persistance**: Nouvelle table `saved_reports` dans `database.py` avec migration automatique du schéma (ajout colonnes `definition`, `created_at`).
+    *   **Backend**: `controllers/adobe_controller.py` gère désormais le pivot des données pour afficher les dates en colonnes et supporte le mode "Comparaison de Segments" vs "Top Items".
+    *   **Frontend**: Refonte de `views/adobe_reports_view.py` avec gestion d'état avancée pour la navigation (redirection après sauvegarde) et l'édition (pré-remplissage du formulaire). Utilisation de `st.data_editor` pour l'interactivité (checkbox courbe).
+*   **Dette Technique**:
+    *   La gestion de la navigation Streamlit repose sur des hacks d'état (`st.session_state`) pour contourner les limitations des widgets natifs. À surveiller lors des mises à jour de Streamlit.
+    *   Le parsing des dates pour les graphiques repose sur le format des noms de colonnes, ce qui crée un couplage fort entre le contrôleur et la vue.
+
+## [Release] - Alpha 7
+
+**🔖 Versioning** : Snapshot de l'application incluant toutes les fonctionnalités jusqu'au Sprint 9 (Générateur de Rapports & Batching).
+**📅 Statut** : Stable
+**🌿 Branche** : `alpha7`
+**📝 Note** : Cette version sert de point de référence avant l'intégration potentielle de fonctionnalités d'écriture (POST/PATCH) plus poussées ou de refonte UI majeure.

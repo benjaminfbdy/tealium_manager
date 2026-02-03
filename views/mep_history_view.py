@@ -40,7 +40,7 @@ def render_mep_history(revisions_data: List[Dict[str, Any]]):
                     break
 
             cols = st.columns([1, 2, 3, 4, 2])
-            is_selected = cols[0].checkbox("", key=f"mep_{rev_id}", value=(rev_id in st.session_state.selected_meps))
+            is_selected = cols[0].checkbox("Sélectionner", key=f"mep_{rev_id}", value=(rev_id in st.session_state.selected_meps), label_visibility="collapsed")
             
             if is_selected:
                 new_selection.append(rev_id)
@@ -81,7 +81,3 @@ def render_mep_history(revisions_data: List[Dict[str, Any]]):
         
     else:
         st.info("Sélectionnez 1 MEP pour l'explorer, ou 2 pour les comparer.")
-
-    # We need to rename the old file and references to it
-    # I'll do that in the next step.
-

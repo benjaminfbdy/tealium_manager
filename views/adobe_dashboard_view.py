@@ -10,7 +10,7 @@ def render_adobe_dashboard_view():
     """
     Renders the Adobe Analytics Dashboard page with a simplified, time-series-focused interface.
     """
-    st.title("📊 Adobe Analytics Dashboard Light")
+    st.title("📊 Requeteur Adobe")
 
     # --- Initialize session state for caching ---
     if "adobe_components" not in st.session_state: st.session_state.adobe_components = None
@@ -126,5 +126,3 @@ def render_adobe_dashboard_view():
                 except Exception as e:
                     st.error("Une erreur est survenue lors de la récupération du rapport. Consultez le terminal pour les logs détaillés.")
                     st.exception(e)
-
-
