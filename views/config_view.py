@@ -134,7 +134,7 @@ def _render_adobe_section(
             # Default to the config being edited, or empty strings
             cfg = adobe_config_to_edit or {}
 
-            name = st.text_input("Nom de la Configuration", value=cfg.get("name", ""), disabled=is_editing)
+            name = st.text_input("Nom de la Configuration", value=cfg.get("name", ""), disabled=False)
             
             auth_method_options = ['oauth', 'jwt', 'manual']
             try:
@@ -155,6 +155,7 @@ def _render_adobe_section(
 
             data_to_save = {
                 "name": name,
+                "original_name": cfg.get("name") if is_editing else None,
                 "auth_method": auth_method,
                 "api_key": api_key,
                 "global_company_id": global_company_id,

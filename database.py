@@ -3,6 +3,7 @@ import json
 import time
 import os
 import datetime
+import pandas as pd
 from typing import Dict, List, Optional
 
 DB_FILE = "tealium_manager.db"
@@ -160,6 +161,20 @@ def initialize_database():
         cursor.execute("ALTER TABLE saved_reports ADD COLUMN definition TEXT DEFAULT '{}'")
 
     conn.commit()
+
+    # Table for caching report results
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS report_results_cache (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            report_id INTEGER NOT NULL,
+            date_range_key TEXT NOT NULL,
+            result_data TEXT NOT NULL,
+            timestamp REAL NOT NULL,
+            status TEXT,
+            FOREIGN KEY (report_id) REFERENCES saved_reports (id) ON DELETE CASCADE,
+            UNIQUE(report_id, date_range_key)
+        )
+    """)
     conn.close()
 
 # --- Global Settings Functions ---
@@ -369,6 +384,55 @@ def delete_adobe_configuration(name: str):
     conn.commit()
     conn.close()
 
+def rename_adobe_configuration(old_name: str, new_name: str) -> bool:
+    """
+    Renames an Adobe configuration.
+    Since 'name' is the PRIMARY KEY, this involves creating a new record,
+    linking dependent rows (saved_reports) to it, and deleting the old one.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("BEGIN TRANSACTION")
+        
+        # 1. Check if new name already exists
+        cursor.execute("SELECT 1 FROM adobe_configurations WHERE name = ?", (new_name,))
+        if cursor.fetchone():
+            raise ValueError(f"Une configuration nommée '{new_name}' existe déjà.")
+
+        # 2. Copy old config to new config
+        # We select all columns from the old row
+        cursor.execute("SELECT * FROM adobe_configurations WHERE name = ?", (old_name,))
+        old_row = cursor.fetchone()
+        if not old_row:
+            raise ValueError(f"Configuration '{old_name}' introuvable.")
+        
+        # Construct insert dynamically based on row keys
+        keys = old_row.keys()
+        values = [new_name if k == 'name' else old_row[k] for k in keys]
+        placeholders = ', '.join(['?'] * len(keys))
+        col_names = ', '.join(keys)
+        
+        cursor.execute(f"INSERT INTO adobe_configurations ({col_names}) VALUES ({placeholders})", values)
+        
+        # 3. Update dependent tables (saved_reports)
+        # We manually update the FK reference
+        cursor.execute("UPDATE saved_reports SET adobe_config_name = ? WHERE adobe_config_name = ?", (new_name, old_name))
+        
+        # 4. Delete old config
+        # Note: We must ensure this doesn't cascade delete the reports we just updated.
+        # Since we updated the reports to point to new_name, they are safe.
+        cursor.execute("DELETE FROM adobe_configurations WHERE name = ?", (old_name,))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        conn.rollback()
+        print(f"Error renaming adobe config: {e}")
+        raise e
+    finally:
+        conn.close()
+
 # --- Adobe Components Caching Functions ---
 
 def save_adobe_components(rsid: str, components: Dict):
@@ -452,6 +516,72 @@ def delete_saved_report(report_id: int):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM saved_reports WHERE id = ?", (report_id,))
+    conn.commit()
+    conn.close()
+
+# --- Report Results Caching Functions ---
+
+def save_report_result(report_id: int, date_range_key: str, df: pd.DataFrame, status: str):
+    """Saves a report's DataFrame result to the cache."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    # orient='split' is efficient for pandas
+    df_json = df.to_json(orient='split', date_format='iso')
+    cursor.execute(
+        """INSERT OR REPLACE INTO report_results_cache 
+           (report_id, date_range_key, result_data, timestamp, status) 
+           VALUES (?, ?, ?, ?, ?)""",
+        (report_id, date_range_key, df_json, time.time(), status)
+    )
+    conn.commit()
+    conn.close()
+
+def load_report_result(report_id: int, date_range_key: str, ttl: int = 86400) -> (Optional[pd.DataFrame], Optional[str]):
+    """Loads a cached report result if it's not older than TTL (default 24h)."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT result_data, timestamp, status FROM report_results_cache WHERE report_id = ? AND date_range_key = ?",
+        (report_id, date_range_key)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if row and (time.time() - row['timestamp'] < ttl):
+        df = pd.read_json(row['result_data'], orient='split')
+        return df, row['status']
+    return None, None
+
+def get_all_cached_report_results() -> List[Dict]:
+    """
+    Retrieves metadata for all cached report results (excluding the heavy result_data).
+    Joins with saved_reports to get the report name.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT c.id, c.report_id, c.date_range_key, c.timestamp, c.status, r.name as report_name, r.rsid
+        FROM report_results_cache c
+        LEFT JOIN saved_reports r ON c.report_id = r.id
+        ORDER BY c.timestamp DESC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def get_cached_result_by_id(cache_id: int) -> Optional[Dict]:
+    """Retrieves a specific cached result by its primary key ID, including data."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT result_data, status FROM report_results_cache WHERE id = ?", (cache_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def delete_cached_result(cache_id: int):
+    """Deletes a specific cache entry."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM report_results_cache WHERE id = ?", (cache_id,))
     conn.commit()
     conn.close()
 

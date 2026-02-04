@@ -133,34 +133,40 @@ class AdobeAnalyticsClient:
         report_definition["settings"]["page"] = 0
         final_report = None
         
+        max_retries = 3
+        backoff_factor = 2 # seconds
+
         endpoint = f"{self.api_base_url}/reports"
         logger.info(f"Attempting to post report to {endpoint}.")
         logger.info(f"Report definition payload: {json.dumps(report_definition, indent=2)}")
 
         while True:
-            try:
-                response = requests.post(endpoint, headers=headers, json=report_definition, proxies=self.proxies)
-                response.raise_for_status()
-                page_data = response.json()
+            for attempt in range(max_retries):
+                try:
+                    response = requests.post(endpoint, headers=headers, json=report_definition, proxies=self.proxies, timeout=120) # Add a timeout
+                    response.raise_for_status()
+                    page_data = response.json()
+                    break # Success, exit retry loop
+                except requests.exceptions.HTTPError as e:
+                    if e.response.status_code in [502, 503, 504] and attempt < max_retries - 1:
+                        wait_time = backoff_factor * (2 ** attempt)
+                        logger.warning(f"Received status {e.response.status_code}. Retrying in {wait_time} seconds... (Attempt {attempt + 1}/{max_retries})")
+                        time.sleep(wait_time)
+                    else:
+                        logger.error(f"Final error during Adobe report request: {e}")
+                        if e.response is not None:
+                            logger.error(f"Response Status: {e.response.status_code}")
+                            logger.error(f"Error Response Body: {e.response.text}")
+                        raise # Re-raise the exception to be handled by the controller
 
-                if final_report is None:
-                    final_report = page_data
-                else:
-                    if "rows" in page_data:
-                        final_report["rows"].extend(page_data["rows"])
-                
-                if page_data.get("lastPage", True):
-                    break
-                report_definition["settings"]["page"] += 1
+            if final_report is None:
+                final_report = page_data
+            elif "rows" in page_data:
+                final_report.setdefault("rows", []).extend(page_data.get("rows", []))
 
-            except requests.exceptions.RequestException as e:
-                logger.error(f"Error during Adobe report request: {e}")
-                if e.response is not None:
-                    logger.error(f"Response Status: {e.response.status_code}")
-                    # Log the full error response body for debugging
-                    logger.error(f"Error Response Body: {e.response.text}")
-                # Re-raise the exception to be handled by the controller
-                raise
+            if page_data.get("lastPage", True):
+                break
+            report_definition["settings"]["page"] += 1
 
         return final_report
 

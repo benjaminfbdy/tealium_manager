@@ -6,6 +6,7 @@ from database import (
     save_adobe_configuration, load_all_adobe_configurations, get_active_adobe_configuration,
     load_adobe_configuration_by_name,
     set_active_adobe_configuration, delete_adobe_configuration,
+    rename_adobe_configuration,
     get_db_status, reset_database,
     save_global_settings, load_global_settings, cache_profile_data
 )
@@ -166,6 +167,8 @@ def handle_add_new_adobe_config(config_data: Dict[str, str]) -> bool:
     # Strip leading/trailing whitespace from all string values to prevent issues.
     stripped_config = {k: v.strip() if isinstance(v, str) else v for k, v in config_data.items()}
 
+    original_name = stripped_config.get("original_name")
+    new_name = stripped_config.get("name")
     auth_method = stripped_config.get("auth_method")
     
     # Basic validation for common fields
@@ -191,6 +194,16 @@ def handle_add_new_adobe_config(config_data: Dict[str, str]) -> bool:
     elif auth_method not in ['oauth', 'jwt', 'manual']:
         print(f"Error: Unknown auth method '{auth_method}'.")
         return False
+
+    # Handle Rename if applicable
+    if original_name and original_name != new_name:
+        try:
+            rename_adobe_configuration(original_name, new_name)
+            # If the renamed config was active, we might need to ensure the new name is set as active
+            # But since we copy the 'is_active' flag in the DB function, it should be fine.
+        except Exception as e:
+            print(f"Error renaming configuration: {e}")
+            return False
 
     # Save the cleaned data
     save_adobe_configuration(stripped_config)
@@ -284,4 +297,3 @@ def test_adobe_discovery() -> Dict:
     except Exception as e:
         print(f"Error during Adobe discovery test: {e}")
         return {"error": str(e)}
-

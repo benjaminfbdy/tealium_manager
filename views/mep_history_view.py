@@ -19,12 +19,12 @@ def render_mep_history(revisions_data: List[Dict[str, Any]]):
     # --- Display Table with Checkboxes ---
     
     # Create header
-    cols = st.columns([1, 2, 3, 4, 2])
-    cols[0].write("**Sélection**")
-    cols[1].write("**Version**")
-    cols[2].write("**Notes**")
-    cols[3].write("**Auteur**")
-    cols[4].write("**Date de MEP**")
+    cols = st.columns([0.5, 1.5, 4, 2, 2])
+    cols[0].markdown("**✅**")
+    cols[1].markdown("**🆔 Version**")
+    cols[2].markdown("**📝 Notes**")
+    cols[3].markdown("**👤 Auteur**")
+    cols[4].markdown("**🚀 Date**")
     st.markdown("---")
 
     # Create a scrollable container for the table rows
@@ -39,18 +39,18 @@ def render_mep_history(revisions_data: List[Dict[str, Any]]):
                     prod_publish_date = pd.to_datetime(pub.get('timestamp_iso')).strftime('%Y-%m-%d %H:%M')
                     break
 
-            cols = st.columns([1, 2, 3, 4, 2])
+            cols = st.columns([0.5, 1.5, 4, 2, 2])
             is_selected = cols[0].checkbox("Sélectionner", key=f"mep_{rev_id}", value=(rev_id in st.session_state.selected_meps), label_visibility="collapsed")
             
             if is_selected:
                 new_selection.append(rev_id)
-            
-            cols[1].markdown(f"`{rev_id}`")
+
+            cols[1].text(rev_id)
             cols[2].text(rev.get("comment", "N/A"))
             cols[3].text(rev.get("created_by", "N/A"))
             cols[4].text(prod_publish_date)
 
-    # Update session state if it has changed
+    # Update session state
     if sorted(new_selection) != sorted(st.session_state.selected_meps):
         st.session_state.selected_meps = new_selection
         st.rerun()
