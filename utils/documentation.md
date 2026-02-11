@@ -180,7 +180,7 @@ This will start the Streamlit server, and you can access the application in your
 *   **Gestion des Erreurs**: Prise en charge du code HTTP 206 (Partial Content) pour identifier les dimensions non activées ("not_enabled_dimension_global") et afficher "Non actif" dans le rapport au lieu d'une erreur technique.
 *   **UX**: Arrondi des valeurs à l'entier supérieur (`math.ceil`) et raccourcissement automatique des noms de segments dans les en-têtes de colonnes pour optimiser l'affichage du tableau d'audit.
 *   **Visualisation**: Ajout d'un code couleur (Emojis) pour les variations (🔴 Critique -100%, 🔻 Baisse, 💚 Hausse) et implémentation d'un graphique en barres spécifique pour visualiser les écarts P1/P2 dans les rapports d'audit.
-*   **Performance Custom**: Extension du moteur asynchrone (`aiohttp`) aux rapports personnalisés de type "Comparaison de Segments". Le traitement est désormais parallélisé (jusqu'à 10 segments simultanés), réduisant drastiquement le temps d'exécution pour les rapports volumineux.
+*   **Précision Temporelle**: Ajout de sélecteurs d'heure (`st.time_input`) dans ls personnalisés de type "Comparaison de Segments". Le traitement est désormais parallélisé (jusqu'à 10 segments simultanés), réduisant drastiquement le temps d'exécution pour les rapports volumineux.
 *   **Scope**: Validation finale et réactivation du périmètre complet (200 eVars + 75 Props).
 
 ## [Release] - Alpha 7

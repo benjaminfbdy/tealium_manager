@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import json
-from datetime import date, timedelta
+from datetime import date, timedelta, time, datetime
 import concurrent.futures
 import math
 from controllers.config_controller import get_all_adobe_configurations
@@ -81,14 +81,8 @@ def render_adobe_reports_view():
         if not saved_reports:
             st.info("Aucun rapport sauvegardé. Allez dans l'onglet 'Créer' pour commencer.")
         else:
-            # Date selection for execution
-            st.markdown("### 1. Choisissez la période")
-            col_d1, col_d2 = st.columns(2)
-            start_date = col_d1.date_input("Date de début", value=date.today() - timedelta(days=7), key="exec_start")
-            end_date = col_d2.date_input("Date de fin", value=date.today(), key="exec_end")
-            
-            # Report selection
-            st.subheader(f"2. Sélectionnez les rapports ({len(saved_reports)})")
+            # --- STEP 1: Report Selection (Moved Up) ---
+            st.subheader(f"1. Sélectionnez les rapports ({len(saved_reports)})")
             selected_report_ids = []
             
             # Header
@@ -100,16 +94,22 @@ def render_adobe_reports_view():
             cols[4].markdown("**🛠️**")
             st.divider()
             
+            has_custom_report_selected = False
+
             for report in saved_reports:
                 def_json = json.loads(report['definition'])
                 is_audit = def_json.get('type') == 'system_audit'
                 icon = "🔍" if is_audit else "📊"
-                type_label = "Audit Système" if is_audit else "Custom"
-
-                cols = st.columns([0.5, 4, 2, 2, 1.5])
-                if cols[0].checkbox("Sélectionner", key=f"sel_{report['id']}", label_visibility="collapsed"):
-                    selected_report_ids.append(report)
                 
+                # Checkbox key must be unique
+                cols = st.columns([0.5, 4, 2, 2, 1.5])
+                is_checked = cols[0].checkbox("Sélectionner", key=f"sel_{report['id']}", label_visibility="collapsed")
+                
+                if is_checked:
+                    selected_report_ids.append(report)
+                    if not is_audit:
+                        has_custom_report_selected = True
+
                 cols[1].write(f"{icon} **{report['name']}**")
                 cols[2].caption(report['adobe_config_name'])
                 cols[3].caption(report['rsid'])
@@ -127,6 +127,25 @@ def render_adobe_reports_view():
             
             st.divider()
             
+            # --- STEP 2: Date Selection (Dynamic) ---
+            # Defaults
+            start_date = date.today() - timedelta(days=7)
+            start_time = time(0, 0)
+            end_date = date.today()
+            end_time = time(23, 59)
+
+            if has_custom_report_selected:
+                st.markdown("### 2. Choisissez la période (pour les rapports Custom)")
+                col_d1, col_d2 = st.columns(2)
+                with col_d1:
+                    start_date = st.date_input("Date de début", value=start_date, key="exec_start_d")
+                    start_time = st.time_input("Heure de début", value=start_time, key="exec_start_t")
+                with col_d2:
+                    end_date = st.date_input("Date de fin", value=end_date, key="exec_end_d")
+                    end_time = st.time_input("Heure de fin", value=end_time, key="exec_end_t")
+            elif selected_report_ids:
+                st.info("ℹ️ Les rapports d'Audit Système sélectionnés utilisent leurs propres périodes configurées.")
+
             col_exec_1, col_exec_2, col_exec_3 = st.columns([2, 1, 1])
             use_parallel = col_exec_2.checkbox("⚡ Exécution Parallèle", value=False, help="Lance les rapports simultanément. Idéal pour plusieurs organisations.")
             force_refresh = col_exec_3.checkbox("🔄 Forcer", value=False, help="Ignore le cache et relance les rapports depuis l'API Adobe.")
@@ -138,7 +157,11 @@ def render_adobe_reports_view():
                     # Clear previous results
                     st.session_state.active_report_results = []
                     
-                    date_range = f"{start_date.strftime('%Y-%m-%d')}T00:00:00/{end_date.strftime('%Y-%m-%d')}T23:59:59"
+                    # Construct date range string (used for Custom reports AND as cache key base)
+                    if has_custom_report_selected:
+                        date_range = f"{start_date.strftime('%Y-%m-%d')}T{start_time.strftime('%H:%M:%S')}/{end_date.strftime('%Y-%m-%d')}T{end_time.strftime('%H:%M:%S')}"
+                    else:
+                        date_range = f"AUDIT_EXEC_{date.today().strftime('%Y%m%d')}" # Placeholder for pure audit runs
 
                     if use_parallel:
                         # --- Parallel Execution ---
@@ -346,6 +369,10 @@ def render_adobe_reports_view():
                                 if val is None or not isinstance(val, (int, float)):
                                     return val
                                 
+                                # Handle NaN (Not a Number) which is a float but fails int() conversion
+                                if isinstance(val, float) and math.isnan(val):
+                                    return "-"
+                                
                                 if val == -100:
                                     return f"🔴 {int(val)}%" # Critical
                                 elif val <= -20:
@@ -387,10 +414,10 @@ def render_adobe_reports_view():
                             # Check for selected rows to plot curves
                             selected_rows_to_plot = edited_df[edited_df["📈"] == True]
                             for idx, row in selected_rows_to_plot.iterrows():
-                                item_name = row.get('Segment') or row.get('Item')
-                                item_id = row.get('_segment_id') or row.get('_item_id')
+                                item_name = row.get('Segment') or row.get('Item') or row.get('Dimension')
+                                item_id = row.get('_segment_id') or row.get('_item_id') or row.get('Dimension')
                                 
-                                if item_id:
+                                if item_name: # Changed check to item_name as Dimension acts as both ID and Name in Audit
                                     st.caption(f"📉 Évolution : **{item_name}**")
                                     
                                     # --- CHART LOGIC DISPATCHER ---
@@ -481,7 +508,13 @@ def render_adobe_reports_view():
                 st.session_state.builder_columns = [{"id": 0, "metric_id": None, "segment_id": None}]
 
         # --- Report Type Selection ---
-        report_mode = st.radio("Type de Rapport", ["📊 Standard (Custom)", "🔍 Audit Système (Dimensions)"], horizontal=True)
+        # Determine default index based on editing state
+        mode_index = 0
+        if is_editing and edit_def.get('type') == 'system_audit':
+            mode_index = 1
+            
+        report_mode = st.radio("Type de Rapport", ["📊 Standard (Custom)", "🔍 Audit Système (Dimensions)"], index=mode_index, horizontal=True)
+        
         st.divider()
 
         st.subheader("Modifier le rapport" if is_editing else "Définir un nouveau rapport")
@@ -565,22 +598,47 @@ def render_adobe_reports_view():
                             st.markdown("#### Périodes par défaut (Sauvegardées)")
                             c_d1, c_d2 = st.columns(2)
                             # Defaults
-                            def_d1_s = date.today() - timedelta(days=14)
-                            def_d1_e = date.today() - timedelta(days=8)
-                            def_d2_s = date.today() - timedelta(days=7)
-                            def_d2_e = date.today() - timedelta(days=1)
+                            def_d1_s, def_t1_s = date.today() - timedelta(days=14), time(0,0)
+                            def_d1_e, def_t1_e = date.today() - timedelta(days=8), time(23,59)
+                            def_d2_s, def_t2_s = date.today() - timedelta(days=7), time(0,0)
+                            def_d2_e, def_t2_e = date.today() - timedelta(days=1), time(23,59)
+
+                            # Helper to parse ISO range if editing
+                            def parse_iso_range(r_str):
+                                try:
+                                    s, e = r_str.split('/')
+                                    s_dt = datetime.strptime(s, "%Y-%m-%dT%H:%M:%S")
+                                    e_dt = datetime.strptime(e, "%Y-%m-%dT%H:%M:%S")
+                                    return s_dt.date(), s_dt.time(), e_dt.date(), e_dt.time()
+                                except:
+                                    return None, None, None, None
+
+                            if is_editing and edit_def.get('range1'):
+                                p_d1s, p_t1s, p_d1e, p_t1e = parse_iso_range(edit_def['range1'])
+                                if p_d1s: def_d1_s, def_t1_s, def_d1_e, def_t1_e = p_d1s, p_t1s, p_d1e, p_t1e
                             
-                            d1_s = c_d1.date_input("Début P1", value=def_d1_s)
-                            d1_e = c_d1.date_input("Fin P1", value=def_d1_e)
-                            d2_s = c_d2.date_input("Début P2", value=def_d2_s)
-                            d2_e = c_d2.date_input("Fin P2", value=def_d2_e)
+                            if is_editing and edit_def.get('range2'):
+                                p_d2s, p_t2s, p_d2e, p_t2e = parse_iso_range(edit_def['range2'])
+                                if p_d2s: def_d2_s, def_t2_s, def_d2_e, def_t2_e = p_d2s, p_t2s, p_d2e, p_t2e
+
+                            with c_d1:
+                                d1_s = st.date_input("Début P1", value=def_d1_s, key="a_d1s")
+                                t1_s = st.time_input("Heure Début P1", value=def_t1_s, key="a_t1s")
+                                d1_e = st.date_input("Fin P1", value=def_d1_e, key="a_d1e")
+                                t1_e = st.time_input("Heure Fin P1", value=def_t1_e, key="a_t1e")
+                            
+                            with c_d2:
+                                d2_s = st.date_input("Début P2", value=def_d2_s, key="a_d2s")
+                                t2_s = st.time_input("Heure Début P2", value=def_t2_s, key="a_t2s")
+                                d2_e = st.date_input("Fin P2", value=def_d2_e, key="a_d2e")
+                                t2_e = st.time_input("Heure Fin P2", value=def_t2_e, key="a_t2e")
                             
                             definition_payload = {
                                 "type": "system_audit",
                                 "segment1": seg1,
                                 "segment2": seg2,
-                                "range1": f"{d1_s}T00:00:00/{d1_e}T23:59:59",
-                                "range2": f"{d2_s}T00:00:00/{d2_e}T23:59:59"
+                                "range1": f"{d1_s}T{t1_s.strftime('%H:%M:%S')}/{d1_e}T{t1_e.strftime('%H:%M:%S')}",
+                                "range2": f"{d2_s}T{t2_s.strftime('%H:%M:%S')}/{d2_e}T{t2_e.strftime('%H:%M:%S')}"
                             }
 
                         else:
@@ -642,11 +700,11 @@ def render_adobe_reports_view():
                         st.divider()
 
                         # --- 5. Global Settings ---
-                        granularity_opts = ["day", "week", "month", "year"]
+                        granularity_opts = ["hour", "day", "week", "month", "year"]
                         granularity_default = edit_def.get('granularity', 'day') if is_editing else 'day'
                         gran_index = granularity_opts.index(granularity_default) if granularity_default in granularity_opts else 0
 
-                        granularity = st.selectbox("Granularité Temporelle", options=granularity_opts, format_func=lambda x: {"day": "Jour", "week": "Semaine", "month": "Mois", "year": "Année"}.get(x, x), index=gran_index)
+                        granularity = st.selectbox("Granularité Temporelle", options=granularity_opts, format_func=lambda x: {"hour": "Heure", "day": "Jour", "week": "Semaine", "month": "Mois", "year": "Année"}.get(x, x), index=gran_index)
 
                         st.markdown("### 🧱 Structure des Lignes")
                         
