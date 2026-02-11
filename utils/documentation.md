@@ -132,6 +132,57 @@ This will start the Streamlit server, and you can access the application in your
     *   La gestion de la navigation Streamlit repose sur des hacks d'état (`st.session_state`) pour contourner les limitations des widgets natifs. À surveiller lors des mises à jour de Streamlit.
     *   Le parsing des dates pour les graphiques repose sur le format des noms de colonnes, ce qui crée un couplage fort entre le contrôleur et la vue.
 
+## [Sprint 10] - Feature: Inventory Crawler & Bulk Selection
+
+**👔 Vue Métier**:
+*   **Mode Crawler**: L'inventaire n'est plus limité à la recherche par mots-clés. Les utilisateurs peuvent désormais lancer une extraction complète de tous les composants (Tags, Extensions, etc.) pour les profils sélectionnés. Cela permet des audits exhaustifs.
+*   **Sélection de Masse**: Ajout de boutons "Tout sélectionner" / "Tout désélectionner" pour faciliter la gestion d'un grand nombre de profils simultanément.
+
+**⚙️ Vue Technique**:
+*   **Modification**: Mise à jour de `views/inventory_view.py`.
+*   **Logique**:
+    *   Le champ `keywords` est devenu optionnel. Si vide, la boucle de filtrage accepte tous les items.
+    *   Utilisation du `st.session_state` pour manipuler dynamiquement la sélection du widget `multiselect` via des boutons externes.
+    *   Ajout d'un bouton `st.download_button` pour exporter le DataFrame résultant en CSV.
+*   **Dette Technique**:
+    *   L'affichage d'un très grand nombre de lignes (plusieurs milliers) dans le tableau final pourrait nécessiter une pagination côté serveur à l'avenir, bien que `st.dataframe` gère bien la charge actuelle.
+
+## [Sprint 11] - Feature: Adobe System Audit (Dimensions)
+
+**👔 Vue Métier**:
+*   **Audit de Couverture**: Permet aux analystes de vérifier rapidement l'utilisation des 200 eVars et 75 Props sur deux segments (ex: Site vs App) et deux périodes.
+*   **Automatisation**: Remplace une tâche manuelle fastidieuse (créer des dizaines de rapports) par un seul clic.
+
+**⚙️ Vue Technique**:
+*   **Architecture**:
+    *   Ajout d'une fonction `run_system_audit_report` dans le contrôleur Adobe. Elle génère dynamiquement les IDs de dimensions (`variables/evar1`...`200`).
+    *   Utilisation intensive de `concurrent.futures.ThreadPoolExecutor` pour lancer ~550 requêtes API en parallèle (275 dimensions * 2 plages de dates).
+    *   Chaque requête récupère les totaux pour 2 segments simultanément pour optimiser le quota API.
+    *   **Correction Sprint 12**: Le client API est maintenant correctement initialisé avec les paramètres globaux (Proxy) à l'intérieur des threads, résolvant le bug des résultats "-1".
+*   **UI**:
+    *   Intégration complète de l'Audit dans le flux "Mes Rapports".
+    *   Ajout d'un sélecteur de type (Standard vs Audit) lors de la création d'un rapport.
+    *   Sauvegarde des configurations d'audit (Segments, Périodes) en base de données via le champ JSON `definition`.
+    *   Sélecteurs de segments intelligents (recherche par défaut "site" et "app").
+
+## [Sprint 12] - Performance: Async Audit
+
+**👔 Vue Métier**:
+*   **Vitesse Extrême**: L'audit système est passé de plusieurs minutes à quelques secondes.
+*   **Fiabilité**: Moins d'erreurs de timeout ou de "Rate Limit" grâce à une gestion intelligente du trafic API.
+
+**⚙️ Vue Technique**:
+*   **Architecture Asynchrone**: Remplacement du threading (`concurrent.futures`) par `asyncio` et `aiohttp`.
+*   **Optimisation API**: Utilisation des `metricFilters` avec `predicates` pour récupérer 4 points de données (2 segments x 2 périodes) en un seul appel API, divisant le nombre de requêtes par 4.
+*   **Nouvelle Dépendance**: Ajout de la librairie `aiohttp`.
+*   **Robustesse**: Ajout d'un calcul de plage de date globale (Union) pour satisfaire les exigences de l'API Adobe (Fix erreur 400) et réintroduction d'une boucle de retry exponentielle pour gérer les Rate Limits (Fix erreur 429).
+*   **Logique Métier**: Retour à la métrique `Pageviews` mais avec un filtre `search: {excludeItemIds: ["0"]}` pour exclure les valeurs "Unspecified". Cela garantit que le volume rapporté correspond uniquement aux cas où la dimension est explicitement définie. Ajout automatique des colonnes de Variation (%).
+*   **Gestion des Erreurs**: Prise en charge du code HTTP 206 (Partial Content) pour identifier les dimensions non activées ("not_enabled_dimension_global") et afficher "Non actif" dans le rapport au lieu d'une erreur technique.
+*   **UX**: Arrondi des valeurs à l'entier supérieur (`math.ceil`) et raccourcissement automatique des noms de segments dans les en-têtes de colonnes pour optimiser l'affichage du tableau d'audit.
+*   **Visualisation**: Ajout d'un code couleur (Emojis) pour les variations (🔴 Critique -100%, 🔻 Baisse, 💚 Hausse) et implémentation d'un graphique en barres spécifique pour visualiser les écarts P1/P2 dans les rapports d'audit.
+*   **Performance Custom**: Extension du moteur asynchrone (`aiohttp`) aux rapports personnalisés de type "Comparaison de Segments". Le traitement est désormais parallélisé (jusqu'à 10 segments simultanés), réduisant drastiquement le temps d'exécution pour les rapports volumineux.
+*   **Scope**: Validation finale et réactivation du périmètre complet (200 eVars + 75 Props).
+
 ## [Release] - Alpha 7
 
 **🔖 Versioning** : Snapshot de l'application incluant toutes les fonctionnalités jusqu'au Sprint 9 (Générateur de Rapports & Batching).

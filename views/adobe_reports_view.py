@@ -3,6 +3,7 @@ import pandas as pd
 import json
 from datetime import date, timedelta
 import concurrent.futures
+import math
 from controllers.config_controller import get_all_adobe_configurations
 from controllers.adobe_controller import (
     get_report_suites, 
@@ -75,7 +76,6 @@ def render_adobe_reports_view():
             st.session_state.report_to_edit = None
             st.rerun()
 
-        
         saved_reports = get_all_saved_reports()
         
         if not saved_reports:
@@ -101,11 +101,16 @@ def render_adobe_reports_view():
             st.divider()
             
             for report in saved_reports:
+                def_json = json.loads(report['definition'])
+                is_audit = def_json.get('type') == 'system_audit'
+                icon = "🔍" if is_audit else "📊"
+                type_label = "Audit Système" if is_audit else "Custom"
+
                 cols = st.columns([0.5, 4, 2, 2, 1.5])
                 if cols[0].checkbox("Sélectionner", key=f"sel_{report['id']}", label_visibility="collapsed"):
                     selected_report_ids.append(report)
                 
-                cols[1].write(f"**{report['name']}**")
+                cols[1].write(f"{icon} **{report['name']}**")
                 cols[2].caption(report['adobe_config_name'])
                 cols[3].caption(report['rsid'])
                 
@@ -220,6 +225,70 @@ def render_adobe_reports_view():
                             # Separate successful rows from error rows
                             error_rows = df[df.get('status') == 'Error'] if 'status' in df.columns else pd.DataFrame()
                             success_rows = df[df.get('status') != 'Error'] if 'status' in df.columns else df
+                            
+                            # --- CLEANUP FOR AUDIT REPORTS ---
+                            # If this is an audit report, rename columns to remove IDs if possible
+                            # We need to infer it's an audit report from columns or definition
+                            def_json = json.loads(report['definition'])
+                            if def_json.get('type') == 'system_audit':
+                                # Rename columns Seg1_P1, etc.
+                                s1_id = def_json.get('segment1')
+                                s2_id = def_json.get('segment2')
+                                
+                                # Attempt to load names from cache to display readable headers
+                                comps, _ = get_or_refresh_components(report['rsid'], config_name=report['adobe_config_name'])
+                                seg_map = {s['id']: s['name'] for s in comps.get('segments', [])} if comps else {}
+                                
+                                s1_name = seg_map.get(s1_id, s1_id) if s1_id else "Seg1"
+                                s2_name = seg_map.get(s2_id, s2_id) if s2_id else "Seg2"
+                                
+                                # --- UI Tweak: Shorten Segment Names for Headers ---
+                                # Try to keep only the part after " - " or ":" to save space
+                                def shorten_name(name):
+                                    if " - " in name:
+                                        return name.split(" - ")[-1].strip()
+                                    if ":" in name:
+                                        return name.split(":")[-1].strip()
+                                    return name
+                                
+                                s1_short = shorten_name(s1_name)
+                                s2_short = shorten_name(s2_name)
+
+                                # Apply rounding (Ceiling) to numeric columns
+                                for col in ["Seg1_P1", "Seg2_P1", "Seg1_P2", "Seg2_P2"]:
+                                    if col in success_rows.columns:
+                                        # Apply only to numeric values, ignore "Non actif" strings
+                                        success_rows[col] = success_rows[col].apply(lambda x: int(math.ceil(x)) if isinstance(x, (int, float)) else x)
+
+                                # Calculate Variations (Numeric)
+                                def calc_variation(curr, prev):
+                                    # Handle non-numeric values (e.g. "Non actif", "Erreur")
+                                    if not isinstance(curr, (int, float)) or not isinstance(prev, (int, float)):
+                                        return None
+                                    if prev == 0:
+                                        return 100.0 if curr > 0 else 0.0
+                                    # Round up to nearest integer (Ceiling)
+                                    val = ((curr - prev) / prev) * 100.0
+                                    return math.ceil(val)
+
+                                if "Seg1_P1" in success_rows.columns and "Seg1_P2" in success_rows.columns:
+                                    success_rows[f"Var {s1_short} (%)"] = success_rows.apply(lambda x: calc_variation(x["Seg1_P2"], x["Seg1_P1"]), axis=1)
+                                if "Seg2_P1" in success_rows.columns and "Seg2_P2" in success_rows.columns:
+                                    success_rows[f"Var {s2_short} (%)"] = success_rows.apply(lambda x: calc_variation(x["Seg2_P2"], x["Seg2_P1"]), axis=1)
+
+                                rename_map = {
+                                    "Seg1_P1": f"{s1_short}\n(P1)",
+                                    "Seg2_P1": f"{s2_short}\n(P1)",
+                                    "Seg1_P2": f"{s1_short}\n(P2)",
+                                    "Seg2_P2": f"{s2_short}\n(P2)",
+                                }
+                                success_rows = success_rows.rename(columns=rename_map)
+                                
+                                # Reorder columns for readability
+                                cols = ["Dimension", f"{s1_short}\n(P1)", f"{s1_short}\n(P2)", f"Var {s1_short} (%)", f"{s2_short}\n(P1)", f"{s2_short}\n(P2)", f"Var {s2_short} (%)"]
+                                # Filter to ensure columns exist (in case of partial data)
+                                cols = [c for c in cols if c in success_rows.columns]
+                                success_rows = success_rows[cols]
 
                             if not error_rows.empty:
                                 st.error(f"{len(error_rows)} segment(s) n'ont pas pu être chargés :")
@@ -272,6 +341,27 @@ def render_adobe_reports_view():
                             # Add column at the end
                             df_display["📈"] = False
                             
+                            # --- Apply Color Coding to Variations (Display Only) ---
+                            def format_variation_display(val):
+                                if val is None or not isinstance(val, (int, float)):
+                                    return val
+                                
+                                if val == -100:
+                                    return f"🔴 {int(val)}%" # Critical
+                                elif val <= -20:
+                                    return f"🔻 {int(val)}%" # Significant Drop
+                                elif val < 0:
+                                    return f"🔸 {int(val)}%" # Slight Drop
+                                elif val == 0:
+                                    return f"⚪ {int(val)}%" # Stable
+                                else:
+                                    return f"💚 +{int(val)}%" # Growth
+
+                            # Apply to all columns containing "Var"
+                            var_cols = [c for c in df_display.columns if "Var" in c and "(%)" in c]
+                            for vc in var_cols:
+                                df_display[vc] = df_display[vc].apply(format_variation_display)
+                            
                             # Configure columns: Hide internal IDs, format Curve checkbox
                             column_config = {
                                 "_segment_id": None, # Hidden
@@ -303,34 +393,64 @@ def render_adobe_reports_view():
                                 if item_id:
                                     st.caption(f"📉 Évolution : **{item_name}**")
                                     
-                                    # Extract time-series data directly from the row
-                                    meta_cols = ['Segment', 'Item', '_segment_id', '_item_id', '📈', 'status', 'error_message']
-                                    data_cols = [c for c in row.index if c not in meta_cols]
-                                    
-                                    if data_cols:
-                                        chart_rows = {}
-                                        for col_name in data_cols:
-                                            val = row[col_name]
-                                            if "(" in col_name and col_name.endswith(")"):
-                                                date_part = col_name.split(" (")[0]
-                                                metric_part = col_name.split(" (")[1][:-1]
-                                            else:
-                                                date_part = col_name
-                                                metric_part = "Valeur"
-                                            
-                                            if date_part not in chart_rows:
-                                                chart_rows[date_part] = {}
-                                            chart_rows[date_part][metric_part] = val
+                                    # --- CHART LOGIC DISPATCHER ---
+                                    is_audit_report = False
+                                    if 'definition' in report:
+                                        def_j = json.loads(report['definition'])
+                                        if def_j.get('type') == 'system_audit':
+                                            is_audit_report = True
+
+                                    if is_audit_report:
+                                        # --- AUDIT CHART (Bar Chart P1 vs P2) ---
+                                        # Extract values from the row using the known column structure
+                                        # Columns are like "Site\n(P1)", "Site\n(P2)", etc.
+                                        # We need to find them dynamically as names might change
+                                        chart_data = {}
+                                        for col in row.index:
+                                            if "\n(P1)" in col:
+                                                seg_name = col.replace("\n(P1)", " (P1)")
+                                                chart_data[seg_name] = row[col]
+                                            elif "\n(P2)" in col:
+                                                seg_name = col.replace("\n(P2)", " (P2)")
+                                                chart_data[seg_name] = row[col]
                                         
-                                        chart_df = pd.DataFrame.from_dict(chart_rows, orient='index')
-                                        try:
-                                            chart_df.index = pd.to_datetime(chart_df.index)
-                                            chart_df.sort_index(inplace=True)
-                                        except:
-                                            pass 
-                                        st.line_chart(chart_df)
+                                        # Filter out non-numeric (e.g. "Non actif")
+                                        chart_data = {k: v for k, v in chart_data.items() if isinstance(v, (int, float))}
+                                        
+                                        if chart_data:
+                                            st.bar_chart(chart_data)
+                                        else:
+                                            st.warning("Pas de données chiffrées à afficher pour cette dimension.")
+
                                     else:
-                                        st.warning("Pas de données temporelles trouvées.")
+                                        # --- STANDARD TIME SERIES CHART ---
+                                        meta_cols = ['Segment', 'Item', '_segment_id', '_item_id', '📈', 'status', 'error_message']
+                                        data_cols = [c for c in row.index if c not in meta_cols and isinstance(row[c], (int, float))]
+                                        
+                                        if data_cols:
+                                            chart_rows = {}
+                                            for col_name in data_cols:
+                                                val = row[col_name]
+                                                if "(" in col_name and col_name.endswith(")"):
+                                                    date_part = col_name.split(" (")[0]
+                                                    metric_part = col_name.split(" (")[1][:-1]
+                                                else:
+                                                    date_part = col_name
+                                                    metric_part = "Valeur"
+                                                
+                                                if date_part not in chart_rows:
+                                                    chart_rows[date_part] = {}
+                                                chart_rows[date_part][metric_part] = val
+                                            
+                                            chart_df = pd.DataFrame.from_dict(chart_rows, orient='index')
+                                            try:
+                                                chart_df.index = pd.to_datetime(chart_df.index)
+                                                chart_df.sort_index(inplace=True)
+                                            except:
+                                                pass 
+                                            st.line_chart(chart_df)
+                                        else:
+                                            st.warning("Pas de données temporelles trouvées.")
                             
                             st.download_button(
                                 f"Télécharger CSV ({report['name']})",
@@ -359,6 +479,10 @@ def render_adobe_reports_view():
              # Default start with one empty column if not editing or if state not set
              if "builder_columns" not in st.session_state:
                 st.session_state.builder_columns = [{"id": 0, "metric_id": None, "segment_id": None}]
+
+        # --- Report Type Selection ---
+        report_mode = st.radio("Type de Rapport", ["📊 Standard (Custom)", "🔍 Audit Système (Dimensions)"], horizontal=True)
+        st.divider()
 
         st.subheader("Modifier le rapport" if is_editing else "Définir un nouveau rapport")
         
@@ -412,9 +536,57 @@ def render_adobe_reports_view():
                         
                         dim_opts = {d['id']: f"{d['name']} ({d['id']})" for d in comps.get('dimensions', [])}
 
-                        # --- 4. Column Builder (Metrics + Filters) ---
-                        st.markdown("### 🏗️ Colonnes (Métriques & Filtres)")
-                        st.caption("Définissez les colonnes de votre tableau. Chaque colonne est une métrique, potentiellement filtrée par un segment.")
+                        definition_payload = {}
+
+                        if report_mode == "🔍 Audit Système (Dimensions)":
+                            st.info("Ce mode configure un audit complet des 275 dimensions (eVars & Props) sur deux segments et deux périodes.")
+                            
+                            col_audit_1, col_audit_2 = st.columns(2)
+                            
+                            # Helpers to find default indices
+                            def find_default(options, keyword):
+                                for i, label in enumerate(options.values()):
+                                    if keyword.lower() in label.lower(): return i
+                                return 0
+
+                            idx_site = find_default(seg_opts, "site")
+                            idx_app = find_default(seg_opts, "app")
+                            
+                            # Pre-fill if editing
+                            if is_editing and edit_def.get('type') == 'system_audit':
+                                s1_val = edit_def.get('segment1')
+                                s2_val = edit_def.get('segment2')
+                                if s1_val in seg_opts: idx_site = list(seg_opts.keys()).index(s1_val)
+                                if s2_val in seg_opts: idx_app = list(seg_opts.keys()).index(s2_val)
+
+                            seg1 = col_audit_1.selectbox("Segment 1 (ex: Site)", options=list(seg_opts.keys()), format_func=lambda x: seg_opts[x], index=idx_site, key="audit_s1")
+                            seg2 = col_audit_2.selectbox("Segment 2 (ex: App)", options=list(seg_opts.keys()), format_func=lambda x: seg_opts[x], index=idx_app, key="audit_s2")
+                            
+                            st.markdown("#### Périodes par défaut (Sauvegardées)")
+                            c_d1, c_d2 = st.columns(2)
+                            # Defaults
+                            def_d1_s = date.today() - timedelta(days=14)
+                            def_d1_e = date.today() - timedelta(days=8)
+                            def_d2_s = date.today() - timedelta(days=7)
+                            def_d2_e = date.today() - timedelta(days=1)
+                            
+                            d1_s = c_d1.date_input("Début P1", value=def_d1_s)
+                            d1_e = c_d1.date_input("Fin P1", value=def_d1_e)
+                            d2_s = c_d2.date_input("Début P2", value=def_d2_s)
+                            d2_e = c_d2.date_input("Fin P2", value=def_d2_e)
+                            
+                            definition_payload = {
+                                "type": "system_audit",
+                                "segment1": seg1,
+                                "segment2": seg2,
+                                "range1": f"{d1_s}T00:00:00/{d1_e}T23:59:59",
+                                "range2": f"{d2_s}T00:00:00/{d2_e}T23:59:59"
+                            }
+
+                        else:
+                            # --- STANDARD REPORT BUILDER ---
+                            st.markdown("### 🏗️ Colonnes (Métriques & Filtres)")
+                            st.caption("Définissez les colonnes de votre tableau. Chaque colonne est une métrique, potentiellement filtrée par un segment.")
 
                         # Load existing columns if editing and not yet loaded into state
                         if is_editing and "builder_columns_loaded" not in st.session_state:
@@ -569,6 +741,14 @@ def render_adobe_reports_view():
                             if selected_segments != st.session_state.selected_segments_state:
                                 st.session_state.selected_segments_state = selected_segments
                         
+                            definition_payload = {
+                                "type": "dimension" if report_type == "Dimension (Top Items)" else "segment",
+                                "columns": st.session_state.builder_columns,
+                                "granularity": granularity,
+                                "dimension": selected_dimension,
+                                "segments": selected_segments
+                            }
+
                         # Save Form
                         st.write("---")
                         with st.form("save_report_form"):
@@ -577,24 +757,18 @@ def render_adobe_reports_view():
                             submit_label = "💾 Mettre à jour le Rapport" if is_editing else "💾 Sauvegarder le Rapport"
                             
                             if st.form_submit_button(submit_label):
-                                if not report_name or not st.session_state.builder_columns:
-                                    st.error("Nom et au moins une colonne requis.")
-                                elif report_type == "Comparaison de Segments" and not selected_segments:
+                                if not report_name:
+                                    st.error("Le nom du rapport est requis.")
+                                elif report_mode == "📊 Standard (Custom)" and not st.session_state.builder_columns:
+                                    st.error("Au moins une colonne est requise.")
+                                elif report_mode == "📊 Standard (Custom)" and report_type == "Comparaison de Segments" and not selected_segments:
                                     st.error("Veuillez sélectionner au moins un segment.")
                                 else:
-                                    definition = {
-                                        "columns": st.session_state.builder_columns, # New format
-                                        "granularity": granularity,
-                                        "type": "dimension" if report_type == "Dimension (Top Items)" else "segment",
-                                        "dimension": selected_dimension,
-                                        "segments": selected_segments
-                                    }
-                                    
                                     success = False
                                     if is_editing:
-                                        success = handle_update_report(edit_data['id'], report_name, selected_config_name, selected_rsid, definition)
+                                        success = handle_update_report(edit_data['id'], report_name, selected_config_name, selected_rsid, definition_payload)
                                     else:
-                                        success = handle_save_report(report_name, selected_config_name, selected_rsid, definition)
+                                        success = handle_save_report(report_name, selected_config_name, selected_rsid, definition_payload)
                                     
                                     if success:
                                         st.success("Rapport enregistré avec succès !")

@@ -232,6 +232,27 @@ def handle_delete_adobe_config(name: str):
         if all_configs:
             set_active_adobe_configuration(all_configs[0]["name"])
 
+# --- Bulk Operations ---
+
+def handle_crawl_all_profiles() -> dict:
+    """
+    Iterates through all saved Tealium configurations and triggers a download for each.
+    Returns a status dictionary.
+    """
+    configs = get_all_configurations()
+    if not configs:
+        return {"success": True, "count": 0} # No work to do
+
+    success_count = 0
+    for config in configs:
+        config_name = config.get("name")
+        if handle_download_profile(config_name):
+            success_count += 1
+    
+    return {
+        "success": success_count == len(configs),
+        "count": len(configs)
+    }
 
 # --- Other Controller Functions ---
 

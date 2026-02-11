@@ -261,7 +261,7 @@ def render_config_panel(
                 }
 
     st.divider()
-    
+
     # --- Connection Status ---
     st.subheader("Statut des Connexions")
     col1, col2 = st.columns(2)
@@ -281,6 +281,18 @@ def render_config_panel(
             st.error("❌ Connexion Adobe échouée")
 
     st.divider()
+
+    # --- Bulk Actions ---
+    st.subheader("Actions en Masse sur les Profils Tealium")
+    if st.button("📥 Lancer le Crawl de Tous les Profils Configurés"):
+        action_result = {"action": "crawl_all", "data": None}
+    
+    if 'crawl_all_status' in st.session_state:
+        if st.session_state.crawl_all_status['success']:
+            st.success(f"✅ Crawl terminé avec succès pour {st.session_state.crawl_all_status['count']} profils !")
+        else:
+            st.error("❌ Certains profils n'ont pas pu être téléchargés. Vérifiez les logs.")
+        del st.session_state.crawl_all_status
 
     # --- Render Sections for Tealium and Adobe ---
     tealium_result = _render_tealium_section(all_tealium_configs, active_tealium_config_name)

@@ -3,6 +3,10 @@ from typing import Dict, List, Optional, Any
 from database import get_active_adobe_configuration, save_report_configuration, update_saved_report, load_saved_reports, delete_saved_report, load_adobe_configuration_by_name, load_global_settings, save_report_result, load_report_result, get_all_cached_report_results, get_cached_result_by_id, delete_cached_result
 from utils.adobe_client import AdobeAnalyticsClient
 import time
+import concurrent.futures
+import random
+import asyncio
+import aiohttp
 
 def get_or_refresh_components(rsid: str, force_refresh: bool = False, config_name: Optional[str] = None) -> (Optional[Dict], Optional[str]):
     """
@@ -203,6 +207,18 @@ def run_saved_report(report: Dict, date_range: str, status_callback=None, force_
     Runs a saved report using its stored configuration.
     Checks for a cached result first unless force_refresh is True.
     """
+    import json
+    
+    # Defensive coding: handle missing or empty definition
+    def_str = report.get('definition')
+    if not def_str:
+        return None, "La définition du rapport est vide."
+    
+    try:
+        definition = json.loads(def_str)
+    except json.JSONDecodeError:
+        return None, "Le format de la définition du rapport est invalide."
+
     report_id = report['id']
     # Create a stable key for the date range by removing special characters
     date_range_key = date_range.replace('/', '_').replace(':', '').replace('-', '')
@@ -222,20 +238,24 @@ def run_saved_report(report: Dict, date_range: str, status_callback=None, force_
     if not config:
         return None, f"Configuration Adobe '{config_name}' introuvable."
 
-    import json
+    # Merge global settings (Proxy) into config
+    global_settings = load_global_settings()
+    full_config = global_settings.copy()
+    full_config.update(config)
     
-    # Defensive coding: handle missing or empty definition
-    def_str = report.get('definition')
-    if not def_str:
-        return None, "La définition du rapport est vide ou corrompue (colonne manquante)."
-    
+    # --- DISPATCHER: Check Report Type ---
+    if definition.get('type') == 'system_audit':
+        # For audit, date_range passed from UI might be ignored if specific ranges are saved, 
+        # OR we can use it as an override. For now, let's use the saved ranges in definition.
+        df = run_system_audit_report(full_config, report['rsid'], definition, status_callback)
+        if df is not None and not df.empty:
+            save_report_result(report_id, date_range_key, df, "OK")
+            return df, "OK"
+        else:
+            return pd.DataFrame(), "Erreur ou aucune donnée (Audit)."
+
     try:
-        definition = json.loads(def_str)
-    except json.JSONDecodeError:
-        return None, "Le format de la définition du rapport est invalide."
-    
-    try:
-        client = AdobeAnalyticsClient(config)
+        client = AdobeAnalyticsClient(full_config)
         # Reconstruct arguments for the client report
         # We need to map the definition back to the structure run_adobe_report builds, 
         # OR just build the report_definition dict directly here.
@@ -315,9 +335,17 @@ def run_saved_report(report: Dict, date_range: str, status_callback=None, force_
             # Mode: Compare Segments (Rows = Segments)
             # We run one report per segment to get the totals/metrics for that segment
             segments = definition.get('segments', [])
-            start_time = time.time()
             
-            for idx, seg_id in enumerate(segments):
+            # --- ASYNC OPTIMIZATION START ---
+            # 1. Prepare Auth
+            client._ensure_token()
+            access_token = client.access_token
+            api_key = client.api_key
+            company_id = client.global_company_id
+            
+            async def fetch_segment_row(session, seg_id, semaphore):
+                url = f"https://analytics.adobe.io/api/{company_id}/reports"
+                
                 # Clone filters and add specific segment
                 current_filters = global_filters.copy()
                 current_filters.append({"type": "segment", "segmentId": seg_id})
@@ -330,49 +358,88 @@ def run_saved_report(report: Dict, date_range: str, status_callback=None, force_
                     "rsid": report['rsid'],
                     "globalFilters": current_filters,
                     "metricContainer": metric_container,
-                    "dimension": time_dimension, # We still need a dimension to get data, usually time
-                    "settings": {"limit": 400} # Fetch full time series to ensure we catch data if present
+                    "dimension": time_dimension,
+                    "settings": {"limit": 400}
                 }
                 
-                try:
-                    print(f"DEBUG: Adobe Report Payload (Segment Row): {json.dumps(report_def)}")
-                    report_data = client.get_report(report_def)
-                except Exception as e:
-                    # If the request fails after all retries, create an error row and continue
-                    seg_name = segment_map.get(seg_id, seg_id)
-                    error_row = {'Segment': f"{seg_name} (Erreur)", '_segment_id': seg_id, 'status': 'Error', 'error_message': str(e)}
-                    data_rows.append(error_row)
-                    # Continue to the next segment
-                    continue
-
-                seg_name = segment_map.get(seg_id, seg_id) # Fallback to ID if name not found
-                row_data = {'Segment': seg_name, '_segment_id': seg_id} # Keep ID hidden for logic
+                headers = {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "x-api-key": api_key,
+                    "Authorization": f"Bearer {access_token}"
+                }
                 
-                # Pivot data: Time buckets become columns
-                if report_data and 'rows' in report_data:
-                    for row in report_data['rows']:
-                        date_key = row['value']
-                        for i, header in enumerate(col_headers):
-                            val = row['data'][i] if i < len(row['data']) else 0
-                            try:
-                                val = float(val)
-                            except (ValueError, TypeError):
-                                val = 0.0
-                            
-                            # Column name format: "YYYY-MM-DD (metric)"
-                            col_label = f"{date_key} ({header})" if len(columns) > 1 else date_key
-                            row_data[col_label] = val
+                async with semaphore:
+                    for attempt in range(4): # Retry logic
+                        try:
+                            async with session.post(url, json=report_def, headers=headers) as response:
+                                if response.status == 200:
+                                    return await response.json(), seg_id, None
+                                elif response.status == 429:
+                                    sleep_time = (2 ** (attempt + 1)) + random.uniform(0, 1)
+                                    await asyncio.sleep(sleep_time)
+                                    continue
+                                else:
+                                    text = await response.text()
+                                    return None, seg_id, f"Error {response.status}: {text}"
+                        except Exception as e:
+                            return None, seg_id, str(e)
+                    return None, seg_id, "Max retries exceeded"
 
-                data_rows.append(row_data)
-                
-                # --- ETA Calculation & Callback ---
-                if status_callback:
-                    elapsed = time.time() - start_time
-                    avg_time_per_req = elapsed / (idx + 1)
-                    remaining_items = len(segments) - (idx + 1)
-                    est_seconds_left = int(avg_time_per_req * remaining_items)
-                    percentage = (idx + 1) / len(segments)
-                    status_callback(idx + 1, len(segments), est_seconds_left, percentage)
+            async def main_segment_loop():
+                semaphore = asyncio.Semaphore(10) # Limit concurrency
+                async with aiohttp.ClientSession() as session:
+                    tasks = []
+                    for seg_id in segments:
+                        tasks.append(fetch_segment_row(session, seg_id, semaphore))
+                    
+                    results = []
+                    completed = 0
+                    total = len(segments)
+                    start_time = time.time()
+
+                    for future in asyncio.as_completed(tasks):
+                        report_data, seg_id, error = await future
+                        
+                        # Process Result
+                        seg_name = segment_map.get(seg_id, seg_id)
+                        
+                        if error:
+                            row_data = {'Segment': f"{seg_name} (Erreur)", '_segment_id': seg_id, 'status': 'Error', 'error_message': error}
+                        else:
+                            row_data = {'Segment': seg_name, '_segment_id': seg_id}
+                            if report_data and 'rows' in report_data:
+                                for row in report_data['rows']:
+                                    date_key = row['value']
+                                    for i, header in enumerate(col_headers):
+                                        val = row['data'][i] if i < len(row['data']) else 0
+                                        try: val = float(val)
+                                        except: val = 0.0
+                                        col_label = f"{date_key} ({header})" if len(columns) > 1 else date_key
+                                        row_data[col_label] = val
+                        
+                        results.append(row_data)
+                        
+                        # Update Progress
+                        completed += 1
+                        if status_callback:
+                            elapsed = time.time() - start_time
+                            avg_time = elapsed / completed
+                            rem = int(avg_time * (total - completed))
+                            status_callback(completed, total, rem, completed/total)
+                    
+                    return results
+
+            # Run Async Loop
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    data_rows = loop.run_until_complete(main_segment_loop())
+                else:
+                    data_rows = asyncio.run(main_segment_loop())
+            except RuntimeError:
+                data_rows = asyncio.run(main_segment_loop())
+            # --- ASYNC OPTIMIZATION END ---
             
             df = pd.DataFrame(data_rows)
             # Fill NaNs with 0 for missing dates in some segments
@@ -507,3 +574,210 @@ def format_date_range_readable(key: str) -> str:
         return f"{start[:4]}-{start[4:6]}-{start[6:]} au {end[:4]}-{end[4:6]}-{end[6:]}"
     except:
         return key
+
+def _get_union_date_range(range1: str, range2: str) -> str:
+    """
+    Calculates a date range that covers both input ranges.
+    Input format: YYYY-MM-DDTHH:MM:SS/YYYY-MM-DDTHH:MM:SS
+    """
+    try:
+        start1, end1 = range1.split('/')
+        start2, end2 = range2.split('/')
+        return f"{min(start1, start2)}/{max(end1, end2)}"
+    except:
+        return range1 # Fallback
+
+def run_system_audit_report(adobe_config_dict, rsid, definition, status_callback=None):
+    """
+    Runs a massive audit on all 200 eVars and 75 props for two segments and two date ranges.
+    OPTIMIZED: Uses asyncio + aiohttp and Adobe API 2.0 'predicates' to fetch 4 data points in 1 call.
+    """
+    # Extract parameters from definition
+    date_range_1 = definition.get('range1')
+    date_range_2 = definition.get('range2')
+    segment_id_1 = definition.get('segment1')
+    segment_id_2 = definition.get('segment2')
+
+    # Calculate global range covering both periods to satisfy API requirement (Error 400 fix)
+    # while allowing metric filters to narrow it down to specific ranges.
+    global_range = _get_union_date_range(date_range_1, date_range_2)
+
+    # 1. Define the list of dimensions to audit
+    # Production scope: 200 eVars + 75 Props
+    dimensions_to_audit = [f"variables/evar{i}" for i in range(1, 201)] + \
+                          [f"variables/prop{i}" for i in range(1, 76)]
+    
+    # 2. Prepare Authentication (Sync)
+    # We get the token once using the sync client to avoid complexity in async
+    try:
+        sync_client = AdobeAnalyticsClient(adobe_config_dict)
+        sync_client._ensure_token()
+        access_token = sync_client.access_token
+        api_key = sync_client.api_key
+        company_id = sync_client.global_company_id
+    except Exception as e:
+        print(f"Auth Error: {e}")
+        return pd.DataFrame()
+
+    # 3. Async Worker Function
+    async def fetch_dimension_data(session, dim_id, semaphore):
+        url = f"https://analytics.adobe.io/api/{company_id}/reports"
+        
+        # Construct Optimized Payload (4 columns in 1 call)
+        # Columns: 0=Seg1_P1, 1=Seg2_P1, 2=Seg1_P2, 3=Seg2_P2
+        
+        # We use atomic filters combined in the metric definition (AND logic)
+        metric_filters = [
+            {"id": "d1", "type": "dateRange", "dateRange": date_range_1},
+            {"id": "d2", "type": "dateRange", "dateRange": date_range_2},
+            {"id": "s1", "type": "segment", "segmentId": segment_id_1},
+            {"id": "s2", "type": "segment", "segmentId": segment_id_2}
+        ]
+
+        metrics = [
+            {"id": "metrics/pageviews", "columnId": "0", "filters": ["d1", "s1"]}, # Seg1 + P1
+            {"id": "metrics/pageviews", "columnId": "1", "filters": ["d1", "s2"]}, # Seg2 + P1
+            {"id": "metrics/pageviews", "columnId": "2", "filters": ["d2", "s1"]}, # Seg1 + P2
+            {"id": "metrics/pageviews", "columnId": "3", "filters": ["d2", "s2"]}  # Seg2 + P2
+        ]
+
+        payload = {
+            "rsid": rsid,
+            "globalFilters": [
+                {"type": "dateRange", "dateRange": global_range}
+            ],
+            "metricContainer": {
+                "metrics": metrics,
+                "metricFilters": metric_filters
+            },
+            "dimension": dim_id,
+            "search": {
+                "excludeItemIds": ["0"]
+            },
+            "settings": {
+                "limit": 1, # We just want totals, top 1 is enough to trigger summaryData calculation
+                "page": 0
+            }
+        }
+
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "x-api-key": api_key,
+            "Authorization": f"Bearer {access_token}"
+        }
+
+        async with semaphore:
+            # Retry Loop for 429 errors
+            for attempt in range(5):
+                try:
+                    async with session.post(url, json=payload, headers=headers) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            # Parse results from summaryData -> filteredTotals
+                            # Order matches columnIds: 0, 1, 2, 3
+                            totals = data.get('summaryData', {}).get('filteredTotals', [0, 0, 0, 0])
+                            # Ensure we have 4 values (pad with 0 if missing)
+                            totals = totals + [0] * (4 - len(totals))
+                            
+                            return {
+                                "Dimension": dim_id,
+                                "Seg1_P1": totals[0],
+                                "Seg2_P1": totals[1],
+                                "Seg1_P2": totals[2],
+                                "Seg2_P2": totals[3]
+                            }
+                        elif response.status == 429:
+                            sleep_time = (2 ** (attempt + 1)) + random.uniform(0, 1)
+                            # print(f"⚠️ 429 Rate Limit for {dim_id}. Retrying in {sleep_time:.2f}s...")
+                            await asyncio.sleep(sleep_time)
+                            continue # Retry
+                        elif response.status == 206:
+                            # Partial content: Check if dimension is disabled
+                            try:
+                                data = await response.json()
+                                col_errors = data.get("columns", {}).get("columnErrors", [])
+                                for err in col_errors:
+                                    if err.get("errorCode") in ["not_enabled_dimension_global", "dimension_not_enabled", "unauthorized_dimension"]:
+                                        return {"Dimension": dim_id, "Seg1_P1": "Non actif", "Seg2_P1": "Non actif", "Seg1_P2": "Non actif", "Seg2_P2": "Non actif"}
+                                
+                                # If 206 but not disabled (other partial error), treat as error
+                                print(f"⚠️ 206 Partial for {dim_id}: {col_errors}")
+                                return {"Dimension": dim_id, "Seg1_P1": "Erreur", "Seg2_P1": "Erreur", "Seg1_P2": "Erreur", "Seg2_P2": "Erreur"}
+                            except:
+                                return {"Dimension": dim_id, "Seg1_P1": "Erreur", "Seg2_P1": "Erreur", "Seg1_P2": "Erreur", "Seg2_P2": "Erreur"}
+                        else:
+                            text = await response.text()
+                            print(f"❌ Error {response.status} for {dim_id}: {text}")
+                            return {"Dimension": dim_id, "Seg1_P1": -1, "Seg2_P1": -1, "Seg1_P2": -1, "Seg2_P2": -1}
+                except Exception as e:
+                    print(f"❌ Exception for {dim_id}: {e}")
+                    return {"Dimension": dim_id, "Seg1_P1": -1, "Seg2_P1": -1, "Seg1_P2": -1, "Seg2_P2": -1}
+            
+            # If all retries failed
+            return {"Dimension": dim_id, "Seg1_P1": -1, "Seg2_P1": -1, "Seg1_P2": -1, "Seg2_P2": -1}
+
+    # 4. Main Async Loop
+    async def main_loop():
+        # Configure Proxy for aiohttp if needed
+        # Note: aiohttp uses a different proxy format than requests
+        # We'll assume direct connection or system proxy for simplicity unless specified
+        # If proxy needed: connector = aiohttp.TCPConnector(ssl=False)
+        
+        # Limit concurrency to avoid 429s
+        semaphore = asyncio.Semaphore(10) 
+        
+        async with aiohttp.ClientSession() as session:
+            tasks = []
+            total = len(dimensions_to_audit)
+            
+            for dim in dimensions_to_audit:
+                tasks.append(fetch_dimension_data(session, dim, semaphore))
+            
+            # Use as_completed to update progress bar
+            results = []
+            completed = 0
+            for future in asyncio.as_completed(tasks):
+                res = await future
+                results.append(res)
+                completed += 1
+                if status_callback:
+                    status_callback(completed, total, 0, completed/total)
+            
+            return results
+
+    # 5. Run Asyncio
+    # Check if there is an existing loop (Streamlit might have one)
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If we are already in a loop (e.g. inside a Jupyter notebook or some Streamlit runners)
+            # we should use create_task, but here we are in a sync function called by Streamlit.
+            # Ideally we use asyncio.run() but it fails if loop is running.
+            # Fallback: nest_asyncio or run_until_complete if not running.
+            final_list = loop.run_until_complete(main_loop())
+        else:
+            final_list = asyncio.run(main_loop())
+    except RuntimeError:
+        # "There is no current event loop in thread" -> Create new one
+        final_list = asyncio.run(main_loop())
+
+    # 6. Format DataFrame
+    
+    # Sort by eVar number then Prop number
+    def sort_key(x):
+        d = x['Dimension']
+        if 'evar' in d: return 1000 + int(d.replace('variables/evar', ''))
+        if 'prop' in d: return 2000 + int(d.replace('variables/prop', ''))
+        return 9999
+        
+    final_list.sort(key=sort_key)
+    
+    df = pd.DataFrame(final_list)
+    
+    # Reorder columns if they exist
+    cols = ["Dimension", "Seg1_P1", "Seg2_P1", "Seg1_P2", "Seg2_P2"]
+    cols = [c for c in cols if c in df.columns]
+    df = df[cols]
+    
+    return df

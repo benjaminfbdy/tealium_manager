@@ -16,6 +16,7 @@ from controllers.config_controller import (
     handle_set_active_config,
     handle_delete_config,
     handle_download_profile,
+    handle_crawl_all_profiles,
     get_database_status,
     handle_database_reset,
     get_all_adobe_configurations,
@@ -295,7 +296,7 @@ elif st.session_state.page == "config":
         action = action_result["action"]
         data = action_result.get("data", {})
         
-        with st.spinner("Traitement..."):
+        with st.spinner("Lancement du crawl de tous les profils..."):
             # Global settings
             if action == "save_global":
                 handle_save_global_settings(data)
@@ -320,6 +321,9 @@ elif st.session_state.page == "config":
                 st.success(f"Profil Tealium '{data['name']}' supprimé.")
             elif action == "download":
                 st.session_state['download_status'] = {"name": data["name"], "success": handle_download_profile(data["name"])}
+            elif action == "crawl_all":
+                crawl_status = handle_crawl_all_profiles()
+                st.session_state['crawl_all_status'] = crawl_status
             
             # Adobe actions
             elif action == "save_adobe_config":
@@ -435,3 +439,34 @@ elif st.session_state.page == "comparison":
         if st.button("Retour à l'historique des MEPs"):
             st.session_state.page = "mep_history"
             st.rerun()
+
+from controllers.config_controller import (
+    get_tealium_connection_status,
+    get_all_configurations,
+    get_active_configuration_details,
+    get_global_settings,
+    handle_save_global_settings,
+    handle_add_new_config,
+    handle_update_config,
+    handle_set_active_config,
+    handle_delete_config,
+    handle_download_profile,
+    handle_crawl_all_profiles,  # Import the new function
+    get_database_status,
+    handle_database_reset,
+    get_all_adobe_configurations,
+    get_active_adobe_configuration_details,
+    get_adobe_config_details_by_name,
+    get_adobe_connection_status,
+    handle_add_new_adobe_config,
+    handle_set_active_adobe_config,
+    handle_delete_adobe_config,
+    test_adobe_discovery
+)
+from views.adobe_dashboard_view import render_adobe_dashboard_view
+from views.adobe_reports_view import render_adobe_reports_view
+from controllers.profile_controller import get_profile_data
+from controllers.mep_controller import get_meps_data, get_mep_comparison_data
+
+# --- Page Configuration ---
+# ... (rest of the file is the same)

@@ -17,8 +17,33 @@ def render_inventory_view():
         if not configurations:
             st.warning("Aucune configuration de profil n'a été trouvée. Veuillez en ajouter une via la page 'Configuration'.")
             return
+        
         profile_options = {f"{p['account']}/{p['profile']} ({p['name']})": p['name'] for p in configurations}
-        selected_profile_display_keys = st.multiselect("Sélectionnez les profils à analyser", options=list(profile_options.keys()))
+        
+        # --- Bulk Selection Logic ---
+        col_sel1, col_sel2 = st.columns([3, 1])
+        
+        # Initialize session state for the multiselect widget if not present
+        if "inventory_selected_profiles" not in st.session_state:
+            st.session_state.inventory_selected_profiles = []
+
+        with col_sel2:
+            st.write("") # Spacer to align with input
+            st.write("")
+            if st.button("Tout sélectionner", use_container_width=True):
+                st.session_state.inventory_selected_profiles = list(profile_options.keys())
+                st.rerun()
+            if st.button("Tout désélectionner", use_container_width=True):
+                st.session_state.inventory_selected_profiles = []
+                st.rerun()
+
+        with col_sel1:
+            selected_profile_display_keys = st.multiselect(
+                "Sélectionnez les profils à analyser", 
+                options=list(profile_options.keys()),
+                key="inventory_selected_profiles"
+            )
+            
         selected_config_names = [profile_options[key] for key in selected_profile_display_keys]
     except Exception as e:
         st.error(f"Une erreur est survenue lors du chargement des profils : {e}")
@@ -39,12 +64,12 @@ def render_inventory_view():
     # --- Search Inputs ---
     col1, col2 = st.columns(2)
     component_types = col1.multiselect("Types de composants", options=["Tags", "Extensions", "Load Rules", "Variables"], default=["Tags", "Extensions", "Load Rules", "Variables"])
-    keywords_input = col2.text_input("Mots-clés (séparés par des virgules)", help="Exemple: adobe, facebook")
+    keywords_input = col2.text_input("Mots-clés (optionnel)", help="Laissez vide pour tout récupérer (mode Crawler). Séparez par des virgules pour filtrer.")
 
     # --- Search Execution ---
     if st.button("Lancer l'inventaire"):
-        if not selected_config_names or not keywords_input or not component_types:
-            st.warning("Veuillez sélectionner des profils, entrer des mots-clés et choisir des types de composants.")
+        if not selected_config_names or not component_types:
+            st.warning("Veuillez sélectionner au moins un profil et un type de composant.")
             return
 
         keywords = [k.strip().lower() for k in keywords_input.split(',') if k.strip()]
@@ -65,13 +90,21 @@ def render_inventory_view():
                         
                         for item in items_to_search:
                             if isinstance(item, dict) and 'name' in item:
-                                for keyword in keywords:
-                                    if keyword in item['name'].lower():
-                                        entry = item.copy() # Start with all raw data
-                                        entry['Profil'] = profile_details
-                                        entry['Type de Composant'] = comp_type_label
-                                        inventory_data.append(entry)
-                                        break # Avoid adding the same item multiple times if it matches multiple keywords
+                                match = False
+                                # If no keywords, we match everything (Crawler mode)
+                                if not keywords:
+                                    match = True
+                                else:
+                                    for keyword in keywords:
+                                        if keyword in item['name'].lower():
+                                            match = True
+                                            break
+                                
+                                if match:
+                                    entry = item.copy() # Start with all raw data
+                                    entry['Profil'] = profile_details
+                                    entry['Type de Composant'] = comp_type_label
+                                    inventory_data.append(entry)
         
         # --- Store results in session state to persist across reruns for column selection ---
         st.session_state['inventory_results'] = inventory_data
@@ -122,6 +155,16 @@ def render_inventory_view():
         if display_data:
             df = pd.DataFrame(display_data)
             st.dataframe(df)
+            
+            # --- CSV Export ---
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Télécharger les résultats en CSV",
+                data=csv,
+                file_name=f"tealium_inventory_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                key='download-csv'
+            )
         else:
             st.info("Sélectionnez des colonnes pour afficher les résultats.")
 
