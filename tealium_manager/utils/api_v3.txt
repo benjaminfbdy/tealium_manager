@@ -1,0 +1,1622 @@
+Tealium V3 API Authentication
+This article provides authentication information for Tealium v3 APIs.
+
+Authentication
+Authentication (login) requires an API key from Tealium iQ Tag Management. To learn more about Tealium API keys, see Managing and Generating API Keys.
+
+The authentication call has two parameters: username and the API key. The API key is used in place of a password to log into the API. After a successful login to the API, the authentication call returns a JWT, referred to as a bearer token. The bearer token, which is valid for 30 minutes, is the value that must be used to authenticate subsequent API calls.
+
+Do not generate a new bearer token for every call. Use the token until it expires. Each token expires within 30 minutes. Failure to use the token in this manner will result in authentication call throttling at Tealium’s discretion.
+
+Region-specific host
+The authentication response contains a token and host value.
+
+Copy to clipboard
+{
+  "token":"eyJ0[...]kqkpj8vE"
+  "host": "us-east-1-platform.tealiumapis.com"
+}
+The host value must be used in subsequent API calls that are region-specific. For example, the visitor API endpoint would be:
+
+Copy to clipboard
+https://us-east-1-platform.tealiumapis.com/v3/visitor/accounts/{account}/profiles/{profile}
+cURL request
+The following cURL request shows the variables required for the API key exchange for a JWT token. The URL, username, and API key are encoded.
+
+Copy to clipboard
+curl -X POST \
+https://platform.tealiumapis.com/v3/auth/accounts/{account}/profiles/{profile} \
+-H 'Content-Type: application/x-www-form-urlencoded' \
+--data-urlencode 'username={email}' \
+--data-urlencode 'key={api_key}'
+Example request
+Copy to clipboard
+curl -X POST \
+https://platform.tealiumapis.com/v3/auth/accounts/{account}/profiles/{profile} \
+-H 'Content-Type: application/x-www-form-urlencoded' \
+--data-urlencode 'username=tealium.user@yourdomain.com' \
+--data-urlencode 'key=7O4Pjn8tuc0%5B3Nc2)%7DyXJW8EaCuDRA1U8Jn%23p)qc*O94(*ubIeEUz%25%5D%242~)WKlLB'
+Example Response
+Copy to clipboard
+* Trying 10.220.2.176...
+* Connected to platform.tealiumapis.com (10.220.2.176) port 443 (#0)
+* TLS 1.2 connection using TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+* Server certificate: *.tealiumiq.com
+* Server certificate: DigiCert SHA2 Secure Server CA
+* Server certificate: DigiCert Global Root CA
+> POST /v3/auth/accounts/{account}/profiles/{profile} HTTP/1.1
+> Host: platform.tealiumapis.com
+> User-Agent: curl/7.43.0
+> Accept: */*
+> cache-control: no-cache
+> content-type: application/x-www-form-urlencoded
+> Content-Length: 127
+>
+* upload completely sent off: 127 out of 127 bytes
+< HTTP/1.1 200 OK
+< Date: Wed, 14 Feb 2018 19:04:22 GMT
+< Content-Type: application/json
+< Content-Length: 893
+< Connection: keep-alive
+< Cache-Control: no-cache,no-store,must-revalidate
+< Pragma: no-cache
+< Expires: 0
+< X-XSS-Protection: 1;mode=block
+< X-NodeId: i-0afb3e9b53ba15930
+< X-Version: 1.0.130-SNAPSHOT
+< Set-Cookie: rememberMe=deleteMe; Path=/urest_service; Max-Age=0; Expires=Tue, 13-Feb-2018 19:10:41 GMT
+<
+* Connection #0 to host platform.tealiumapis.com left intact
+{
+  "token":"eyJ0[...]kqkpj8vE"
+  "host": "us-east-1-platform.tealiumapis.com"
+}
+
+
+Tealium V3 API request format
+This article provides information about the Tealium v3 API request format.
+
+Root URL
+Each API has its own endpoint and supported parameters. The root URL for all API requests is:
+
+Copy to clipboard
+https://platform.tealiumapis.com/v3
+An API endpoint is documented with a specific HTTP method and path, for example:
+
+Copy to clipboard
+GET /visitor
+Some endpoints show placeholder variables ({variable}) to indicate values that you supply. Most endpoints require the name of the your Tealium account and profile in the path of the call.
+
+Example API endpoint path for Visitor Profile API:
+
+Copy to clipboard
+https://platform.tealiumapis.com/v3/customer/visitor/accounts/{account}/profiles/{profile}
+Request and response format
+The API supports JavaScript Object Notation (JSON). API requests that use JSON require the following header setting:
+
+Copy to clipboard
+Content-Type: application/json
+Most responses are in JSON format. Documentation for each endpoint contains example cURL calls and responses.
+
+Rate Limits
+Tealium API endpoints serve different purposes and can vary in their rate limits. Check the specific API endpoint documentation for rate limit information. If you exceed the stated rate limit for any API endpoint, you can expect the HTTP 429 Too Many Requests response code.
+
+Tealium V3 API status codes
+This article provides information about the Tealium v3 API status codes.
+
+The Tealium v3 APIs use standard HTTP response status codes to indicate the status of a request.
+
+Status Code	Description
+200	OK
+400	Bad request
+401	Unauthorized
+404	Not found
+429	Too many requests
+50X	Internal server error
+
+
+About iQ Profiles API
+This section explains how to manage your iQ configurations through API. Use the iQ Profiles API to programmatically control and update your profile configuration.
+
+How it works
+iQ Profiles is an API endpoint that makes your iQ Tag Management configuration available programmatically. Use this endpoint to retrieve specific configuration components, such as tags, extensions, load rules, events, and variables, and to add, edit, and delete a limited subset of components.
+
+Use this API to access the versions and change history of your profiles and integrate your own SDLC.
+
+iQ Profiles currently supports two requests:
+
+GET
+Returns specific content about iQ Tag Management account profiles, including: load rules, tags, tag templates, events, extensions, variables, and version IDs.
+PATCH
+Perform create, update, and delete operations on a limited subset of configuration components. Using this method results in new saved versions of your profile.
+Concurrent users and API users
+When updating a profile, iQ Profiles scans for concurrent users and will lock the profile for API users to protect against concurrent changes. If another user is viewing the same profile or the profile has just been updated (within 15 seconds), the PATCH method will receive an error.
+
+Saving, versioning, and publishing
+Using the PATCH request to update a profile creates a new or updated version in the application. To distinguish versions generated by the API from versions created in the application, the API formats the version name as API | {TIMESTAMP}.
+
+To publish this profile after a successful PATCH call, log into the application, navigate to the latest saved version of your profile after the patch and publish.
+
+Permission requirements
+GET Profile
+Save and Save as New Versions permission
+PATCH Profile
+Save Existing Versions or Save as New Versions permission
+Authentication
+The bearer token is used to authenticate all API calls and not the API key. The API key is only used in the authentication call. In addition to the bearer token, the authentication response includes a region-specific hostname that must be used in subsequent server-side API calls.
+
+To learn about generating a bearer token from the API key, see Authentication.
+
+iQ Profiles API Objects
+This document describes the JSON structure of Tealium iQ profiles, detailing the fields, configurations, and relationships between variables, tags, load rules, extensions, and events within a profile.
+
+Available fields
+Object	Type	Description
+account	String	The Tealium account name.
+profile	String	The Tealium profile name.
+versionTitle	String	The title of this version of the iQ profile. If not specified, the versionTitle will be formatted as API | {TIMESTAMP}.
+version	String	The version ID of this iQ profile.
+minorVersion	String	The version ID that is updated after you save a profile whether published or not. If you save and then publish, the minorVersion and version will not match. They will match only if you perform a Save As.
+parentVersion	String	The originating profile version for save or saveAs operations.
+creation	Date	Date of profile creation.
+customTargets	String	List of user-defined custom target environments.
+versionDetails	Object	Details about the current version including: location of where the current profile version is published to, the email of the user who published the profile, and notes about the profile.
+environmentVersions	Object	List of the current published profile version for each environment.
+dataCloudLinkedProfiles	String	The linked server-side profile name.
+libraryType	String	The type of library being inherited. If no library is inherited, the value is NONE.
+Required - All profiles include this library automatically.
+Optional - You specify which profiles include this library.
+NONE - Indicates the given profile is not a library.
+linkedProfiles	Array[object]	For libraries, this field lists the values that the profiles inherit from this library. For profiles, this value is null.
+linkedLibraries	Array[object]	For profiles, this field represents the libraries linked to the profile. For libraries this value is null.
+variables	Array of variables	Array of variable objects in the profile.
+tags	Array of tags	Array of tags objects in the profile.
+loadRules	Array of load rules	Array of load rules objects in the profile.
+extensions	Array of extensions	Array of extensions objects in the profile.
+events	Array of events	Array of event objects in the profile.
+versionIds	Array	List of previous versions.
+templateList	–	Lists all the tag templates associated with the profile.
+Example
+
+Copy to clipboard
+{
+    "account": "my_account",
+    "profile": "main",
+    "versionTitle": "Version 2022.03.22.2108",
+    "version": "202203222108",
+    "minorVersion": "202203222108",
+    "parentVersion": "202309191127",
+    "creation": "202201131654",
+    "customTargets": null,
+    "versionDetails": {},
+    "environmentVersions": {},
+    "dataCloudLinkedProfiles": "{}",
+    "libraryType": "NONE",
+    "linkedProfiles": null,
+    "linkedLibraries": [],
+    "variables": null,
+    "extensions": null,
+    "loadRules": null,
+    "tags": null,
+    "events": null,
+    "templateList": null,
+    "versionIds": null
+}
+Variables
+Object	Type	Description
+id	Number	Variable ID.
+uniqueIdentifier	String	Variable identifier used to refer to the variable from extension conditions, tag dataMappings, and load rule conditions.
+name	String	The variable title.
+alias	String	The variable name.
+type	String	A prefix representing the variable type.
+ls - Local storage
+ss - Session storage
+udo - Universal Data Object
+qp - Query string parameter
+cp - Cookie
+js - JavaScript variable
+meta - Meta data element
+va - AudienceStream attribute
+notes	String	Notes about the variable.
+context	Array	The scope for attributes imported from AudienceStream.
+Values: current_visit or visitor
+library	String	Name of the library from which the variable is inherited.
+imported	String	The source of an imported variable. This is set to AudienceStream for all AudienceStream attributes.
+usedIn	Object	The list of IDs where this variable is used.
+Tags
+Object	Type	Description
+id	Number	The unique ID of the tag.
+tagID	Number	The system ID for this tag type. This value is the same for all tags of the same type. For example, 6037 for the Facebook Pixel tag.
+name	String	The user generated tag name from the tag configuration.
+library	String	Name of the library from which the tag is inherited.
+status	String	The on/off status: active or inactive.
+notes	String	Notes about the tag.
+dataMappings	Map <String, String>	Returns Tealium IQ variable and its corresponding mapped destination.
+selectedTargets	Map<String, Boolean>	An object of environments where the tag is allowed to be published.
+environmentVersions	Map<String, Boolean>	An array of the environments where this tag was last published.
+advancedConfiguration	Object	A set of advanced configurations corresponding to the tag configuration settings.
+advConfigBundle — True or False
+advConfigLoadType — True or False
+advConfigOptOut — True
+advConfigSend— True or False advConfigSrc — Text field
+tagTiming — DOM Ready or Prioritized
+configuration	Map <String, Object>	A String and Object Map of tag configurations made available by the vendor.
+rules	Object	The load rules to apply or exclude from the tag.
+template	Object	Returns the full tag template. Requires includes = tags.template in the request.
+Load rules
+Object	Type	Description
+id	Number	The unique ID of the load rule.
+name	String	The name of the load rule.
+status	String	The on/off status: active or inactive.
+library	String	The name of the associated library.
+notes	String	Notes about the load rules.
+startDate	Date	For scheduled load rules, the start date.
+endDate	Date	For scheduled load rules, the end date.
+environmentVersions	Map<String, Boolean>	List of the current published load rule version for each environment.
+usedIn	Object	The list of IDs where this load rule is used.
+conditions	Array[object]	An array of objects that include variable name, operator, and value. Each object within an array is associated by an and operator while each array within the array is associated by an or operator.
+Extensions
+Object	Type	Description
+id	Number	The unique ID of the extension.
+extensionId	Number	The system ID for this extension type. This value is the same for all extensions of the same type. For example, 100036 for the JavaScript Code extension.
+extensionType	String	The system name for this extension type. This value is the same for all extensions of the same type. For example, Javascript Code for the JavaScript Code extension.
+name	String	The name of the extension.
+library	String	The name of the associated library.
+notes	String	The notes entered for the extension.
+loadRule	Mixed	A comma-separated list of load rule IDs, or all for All Pages.
+scope	String	The name of the extension scope or, for tag-scoped extensions, a comma-separated list of tag IDs.
+utag Sync
+Pre Loader
+Before Load Rules
+After Load Rules
+DOM Ready
+Tag Scoped Extensions
+After Tag Extensions For more information about tag-scoped extensions and how they work with occurrence, see Understanding Scope.
+occurrence	String	Determines the number of times the JavaScript code extension runs per page load. Values: Run Once or Run Always.
+status	String	The on/off status: active or inactive.
+selectedTargets	Map<String, Boolean>	Environments where the extension is allowed to be published.
+environmentVersions	Map<String, Boolean>	An array of the environments where the extension is published.
+conditions	Array[object]	The conditions set for the specific extension.
+configuration	Map <String, Object>	A Map of configurations for each extension.
+Events
+OBJECT	TYPE	DESCRIPTION
+id	Number	The unique ID of the event.
+eventID	Number	The system ID for this event type. This value is the same for all events of the same type.
+name	String	Name of the event.
+status	String	The on/off status: active or inactive.
+eventType	String	Type of event being tracked.
+mouseEvents- Includes the following user actions:
+click - When a visitor clicks their mouse on a page.
+mousedown - When a visitor moves their mouse down.
+mouseup - When a visitor moves their mouse down.
+mouseOver - When a visitor hovers their mouse over a specific element on a page.
+formSubmit - When a visitor submits a form on a page.
+youtubeVideo - When a visitor interacts with an embedded YouTube video on a page.
+vimeoVideo - When a visitor interacts with an embedded Vimeo video on a page.
+html5Video - When a visitor interacts with an embedded HTML5 video on a page.
+pageView - When a visitor views a page.
+scroll - When a visitor scrolls through a page, vertically or horizontally.
+elementVisibility - When the page displays a screen element to a visitor.
+scope	String	The name of the extension scope or, for tag-scoped extensions, a comma-separated list of tag IDs.
+After Load Rules
+DOM Ready
+For more information about tag-scoped events, see Scope.
+trackingEvent	String	The event call made when the event takes place.
+notes	String	Notes about the event.
+library	String	The name of the associated library.
+eventLoadRulesList	String	A list of all load rules used in the event.
+eventTrigger	Object	Configurations specific to each event type. For more information about event triggers, see Events > Event Triggers.
+selectedTargets	Map<String, Boolean>	Environments where the event is allowed to be published.
+environmentVersions	Map<String, Boolean>	An array of the environments where the event is published.
+eventVariables	Object	Variables specific to each event type.
+rules	Object	Rules that dictate when an event listener is loaded on the page.
+usedIn	Object	The list of IDs where this event is used.
+
+
+iQ GET Profile API
+The iQ GET Profile API retrieves an iQ Tag Management account profile, including specific configuration components and version history.
+
+How it works
+Use the GET method to retrieve an account profile:
+
+Copy to clipboard
+GET /v3/tiq/accounts/{ACCOUNT}/profiles/{PROFILE}?includes={INCLUDE}&publishVersion={PUBLISH_VERSION}
+Authentication
+The bearer token is used to authenticate all API calls and not the API key. The API key is only used in the authentication call. In addition to the bearer token, the authentication response includes a region-specific hostname that must be used in subsequent server-side API calls.
+
+To learn about generating a bearer token from the API key, see Authentication.
+
+GET operation parameters
+This command uses the following parameters:
+
+Parameter	Type	Required	Description
+publishVersion	String	Optional	The version ID of the profile to retrieve. If you omit this parameter, the most recent version is retrieved.
+Version IDs are in the format YYYYMMDDhhmm
+Example: "202202111806"
+includes	Array	Optional	An array of the configuration components to include in the response. Add this query string parameter for each component to include.
+For example, to get variables and extensions: &includes=variables&includes=extensions Default: none
+Values: loadRules, tags, tags.templateList, tags.template, extensions, variables, events , and versionIDs
+To retrieve the list of tag templates for a profile, your GET request must include tags and tags.templateList. For example, &includes=tags&includes=tags.templateList.
+To retrieve the tag templates themselves, include tags and tags.template. For example, &includes=tags&includes=tags.template.
+
+Example cURL request
+Copy to clipboard
+curl -H 'Authorization: Bearer {token}' \
+https://platform.tealiumapis.com/v3/tiq/accounts/{ACCOUNT}/profiles/{PROFILE}?includes=loadRules&includes=extensions&includes=tags&includes=tags.template&includes=variables&includes=events&includes=versionIds&publishVersion=202003161355
+Example response
+ Expand to view code snippet
+Error messages
+Potential error messages for this endpoint:
+
+Error Code	Error Message
+400	"Profile libraries are out of date, merge changes before patching profile - {ACCOUNT} | profile: {PROFILE}"
+"Variable validation failed - variableId: {VARIABLE ID} | {ACCOUNT} | profile: {PROFILE}. Cause: {cause}"
+404	"Profile not found - account: {ACCOUNT} | profile: {PROFILE}"
+"Profile library not found - account: {ACCOUNT} | profile: {PROFILE}"
+"Profile (legacy) not found - account: {ACCOUNT} | profile: {PROFILE}"
+Error in getting next extension id - {ACCOUNT} profile: {PROFILE}"
+409	"Users are currently viewing the same account: {ACCOUNT} | profile: {PROFILE}"
+"Conflict with profile extension: _id: {ID}, extType: {TYPE}, name: {NAME} - {ACCOUNT} | profile: {PROFILE}"
+500	"Error processing json for extension - account: {ACCOUNT} | profile: {PROFILE}"
+
+iQ JavaScript Extension API
+The iQ JavaScript Extension API lets you programmatically create, update, and delete JavaScript Code extensions in an iQ Tag Management profile.
+
+To learn more about this API and available object fields, see iQ Profiles API and iQ Profiles Objects.
+
+How it works
+iQ Profiles uses JSON objects to retrieve data from an iQ Tag Management account profile and update the basic JavaScript Code extension, which lets you use custom code deployment processes to manage iQ Tag Management profiles.
+
+Use the PATCH method to create, update, and delete components in the iQ Profile object.
+
+Copy to clipboard
+PATCH /v3/tiq/accounts/{ACCOUNT}/profiles/{PROFILE}
+When you use the PATCH method you are making changes to your profile configuration programmatically using a save or save-as. After making changes with the API you must still log into the application to publish.
+
+Example cURL Request
+Copy to clipboard
+curl --location --request PATCH 'https://platform.tealiumapis.com/v3/tiq/accounts/{ACCOUNT}/profiles/{PROFILE}' \
+--header 'Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzUx...MiJ9' \
+--header 'Content-Type: application/json' \
+--data-raw '
+Authentication
+The bearer token is used to authenticate all API calls and not the API key. The API key is only used in the authentication call. In addition to the bearer token, the authentication response includes a region-specific hostname that must be used in subsequent server-side API calls.
+
+To learn about generating a bearer token from the API key, see Authentication.
+
+Profile fields
+Profiles are JSON objects that contain the following possible fields:
+
+Field	Type	Required	Description
+versionTitle	String	Optional	The title of the resulting saved version.
+Default with saveType set to saveAs : API | {TIMESTAMP}
+Default with saveType set to save: Existing version title.
+saveType	String	Optional	The type of save to perform with the PATCH request: save or saveAs. Default is saveAs.
+notes	String	Required	Additional notes about the publish version.
+operationList	Array	Required	A list of operation objects. For example, multiple JavaScript extensions.
+op	String	Required	The operation to perform: add, replace, or remove.
+path	String	Required	The component type and ID to update, in the format:/{TYPE}/{ID}.
+value.object	String	Required	The object type being updated: variable or extension.
+value.name	String	Required (for add/replace)	Title of the component.
+value.notes	String	Optional	Additional notes about the component.
+value.type	String	Required
+(for extensions)	The type of extension to add.
+value.scope	String	Optional	The name of the extension scope or, for tag-scoped extensions, a comma-separated list of tag IDs.
+Before Load Rules
+After Load Rules
+DOM Ready
+Tag Scoped Extensions
+After Tag Extensions
+value.occurrence	String	Optional	Determines the number of times the JavaScript code extension runs per page load. Values: Run Once or Run Always. Default: Run Always.
+value.status	String	Optional	The on/off status of the component: active or inactive.
+Default: active
+value.selectedTargets	Map <string, Boolean>	Optional	An object of environments to publish the component to:
+{ "prod" : true|false, "qa" : true|false, "dev" : true|false } Default: All environments set to true.
+value.conditions	Array[object]	Optional	The conditions object for the extension that includes the variable, operator, and value. If you do not include conditions in your PATCH request, but they exist in the profile, the request will be seen as a remove action.
+value.configuration	Array[object]	Required	The configuration object for the component. This object varies for each type of component. Only one object is allowed in this array field. For example: { name: “code” value: “JSON-escaped JavaScript code here” }
+Example request
+Copy to clipboard
+{
+  "versionTitle":"Version 2023.09.19.1127",
+  "saveType": "saveAs",
+  "notes": "version notes here",
+  "operationList":[
+    {
+      "op":"add",
+      "path":"/extensions",
+      "value":{
+        "object": "extension",
+        "name": "My extension",
+        "notes": "extension notes here",
+        "type": "Javascript Code",
+        "scope": "After Load Rules",
+        "occurence": "Run Always",
+        "status": "active",
+        "selectedTargets":{
+          "qa": true,
+          "dev": true,
+          "prod": true
+        },
+        "conditions": [
+          [
+            {
+              "variable": "va.badges.30",
+              "operator": "is_badge_assigned",
+              "value": ""
+            }
+          ]
+        ],
+        "configuration": [
+          {
+            "name": "code",
+            "value": "b.page_name ||= \"Generic Page\";"
+          }
+        ]
+      }
+    }
+  ]
+}
+PATCH operation parameters
+Instead of POST, PUT, and DELETE methods, the PATCH method uses the op parameter to specify the action to perform.
+
+The op parameter supports the following values:
+
+add - Create the component.
+replace - Update the component.
+remove - Delete the component.
+To specify the type and ID of the component, use the path parameter. The path parameter format is /{TYPE}/{ID}.
+
+For example, to add an extension use:
+
+Copy to clipboard
+"op" : "add",
+"path" : "/extensions"
+To update a specific extension, add the ID to the path:
+
+Copy to clipboard
+"op" : "replace",
+"path" : "/extensions/503"
+Create extension
+This PATCH method takes a profile object and additional extension fields.
+
+Example request
+Copy to clipboard
+{
+  "versionTitle":"Version 2023.09.19.1127",
+  "saveType": "saveAs",
+  "notes": "version notes here",
+  "operationList":[
+    {
+      "op":"add",
+      "path":"/extensions",
+      "value":{
+        "object": "extension",
+        "name": "Lowercase extension",
+        "notes": "extension notes here",
+        "type": "Lower-Casing",
+        "scope": "After Load Rules",
+        "occurence": "Run Always",
+        "status": "active",
+        "selectedTargets":{
+          "qa": true,
+          "dev": true,
+          "prod": true
+        },
+        "configuration":[
+          {
+           "all": true,
+           "lower_case_arrays": "true",
+            "constructor": "",
+            "initialize": ""
+          }
+        ]
+      }
+    }
+  ]
+}
+Update extension
+This PATCH method takes a profile object and additional extension fields.
+
+Example request
+Copy to clipboard
+{
+  "versionTitle":"Version 2023.09.19.1127",
+  "saveType": "saveAs",
+  "notes": "version notes here",
+  "operationList":[
+    {
+      "op":"replace",
+      "path":"/extensions",
+      "value":{
+        "object": "extension/86",
+        "name": "Lowercase extension",
+        "notes": "extension notes here",
+        "type": "Lower-Casing",
+        "scope": "After Load Rules",
+        "occurence": "Run Always",
+        "status": "active",
+        "selectedTargets":{
+          "qa": true,
+          "dev": true,
+          "prod": true
+        },
+        "configuration":[
+          {
+           "all": true,
+           "lower_case_arrays": "true",
+            "constructor": "",
+            "initialize": ""
+          }
+        ]
+      }
+    }
+  ]
+}
+Delete extension
+This PATCH method takes a profile object and additional extension fields.
+
+Example request
+Copy to clipboard
+{
+  "versionTitle":"Version 2023.09.19.1127",
+  "saveType": "saveAs",
+  "notes": "version notes here",
+  "operationList":[
+    {
+      "op":"remove",
+      "path":"/extensions/86",
+      "value":{
+        "object": "extension",
+      }
+    }
+  ]
+}
+Error messages
+Potential error messages for this endpoint:
+
+Error Code	Error Message
+400	"Validate patch request failed due to unsupported extension type {TYPE}"
+"Unsupported extension type {TYPE}"
+"Validate patch request failed due to %s"
+"Cannot set tag scope extension with tags that do not exist, id: {ID} - {ACCOUNT} | profile: {PROFILE}"
+"Cannot set extension scope to sync if the setting is not turned on - {ACCOUNT} | profile: {PROFILE}"
+"Error in getting next extension id - {ACCOUNT} | profile: {PROFILE}"
+"Profile libraries are out of date, merge changes before patching profile - {ACCOUNT} | profile: {PROFILE}"
+"patchProfile.arg2.notes: must not be empty"
+404	"Extension validation failed - extensionId: {ID} | account: {ACCOUNT} | profile: {PROFILE}. Cause: not found"
+"Extension ID {ID} not found in the profile {PROFILE}"
+"Account: {ACCOUNT}, profile: {PROFILE} not found"
+409	"Conflict with profile extension: _id: {ID}, extType: {EXT_TYPE}, title: {TITLE}"
+"Users are currently viewing the same account: {ACCOUNT} profile: {PROFILE}"
+"Error saving profile: {PROFILE} for account: {ACCOUNT}, duplicate versions: {VERSIONS}"
+500	"An error occurred"
+"Profile: {PROFILE} inherits from library profile"
+"Unable to invoke request: unknown host, see logs for more detail."
+"Error processing json for extension - account: {ACCOUNT} | profile: {PROFILE}"
+"Error saving profile metadata - account: {ACCOUNT} | profile: {PROFILE}"
+"Error saving profile - account: {ACCOUNT} | profile: {PROFILE}"
+"Error saving profile(legacy) - {ACCOUNT} | profile: {PROFILE}"
+
+iQ Events API
+The iQ Events API lets you programmatically create, update, and delete event listeners in an iQ Tag Management profile.
+
+To learn more about this API and available object fields, see iQ Profiles API and iQ Profiles Objects.
+
+How it works
+Use the PATCH method to create, update, and delete components in the iQ Profile object.
+
+Copy to clipboard
+PATCH /v3/tiq/accounts/{ACCOUNT}/profiles/{PROFILE}
+When you use the PATCH method, you are making changes to your profile events programmatically using a save or save-as. After making changes with the API, you must still log into the application to publish.
+
+Example cURL request
+Copy to clipboard
+curl --location --request PATCH 'https://platform.tealiumapis.com/v3/tiq/accounts/{ACCOUNT}/profiles/{PROFILE}' \
+  --header 'Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzUx...MiJ9' \
+  --header 'Content-Type: application/json' \
+  --data '
+Authentication
+The bearer token is used to authenticate all API calls and not the API key. The API key is only used in the authentication call. In addition to the bearer token, the authentication response includes a region-specific hostname that must be used in subsequent server-side API calls.
+
+To learn about generating a bearer token from the API key, see Authentication.
+
+Profile fields
+Profile events are JSON objects that contain the following possible fields:
+
+OBJECT	TYPE	REQUIRED	DESCRIPTION
+versionTitle	String	Optional	The title of the resulting saved version.
+Default with saveType set to saveAs : API | {TIMESTAMP}
+Default with saveType set to save: Existing version title
+saveType	String	Optional	The type of save to perform with the PATCH request: save or saveAs. Default is saveAs.
+notes	String	Required	Additional notes about the publish version.
+operationList	Array	Required	A list of operation objects. For example, multiple events.
+op	String	Required	The operation to perform: add, replace, or remove.
+path	String	Required	The component type and ID to update, in the format:/{TYPE}/{ID}.
+value.object	String	Required	The object type being updated: variable, extension, or event.
+value.name	String	Required (for add/replace)	Name of the event.
+value.notes	String	Optional	Notes about the event.
+value.status	String	Required	The on/off status: active or inactive.
+value.occurrence	String	Optional	Determines the number of times the event trigger will result in a tracking call. Values: Run Once or Run Always. Default: Run Always.
+value.type	String	Required	Type of event being tracked. Type of event being tracked.
+mouseEvents- Includes the following user actions:
+click - When a visitor clicks their mouse on a page.
+mousedown - When a visitor moves their mouse down.
+mouseup - When a visitor moves their mouse down.
+mouseOver - When a visitor hovers their mouse over a specific element on a page.
+formSubmit - When a visitor submits a form on a page.
+youtubeVideo - When a visitor interacts with an embedded YouTube video on a page.
+vimeoVideo - When a visitor interacts with an embedded Vimeo video on a page.
+html5Video - When a visitor interacts with an embedded HTML5 video on a page.
+pageView - When a visitor views a page.
+scroll - When a visitor scrolls through a page, vertically or horizontally.
+elementVisibility - When the page displays a screen element to a visitor.
+value.scope	String	Optional	The name of the event scope.
+DOM Ready
+After Load Rules
+value.trackingEvent	String	Required	The tracking event for the event listener:
+link
+view
+custom-event-of-anytype
+value.selectedTargets	Map <string, Boolean>	Optional	An object of environments to publish the component to:
+{ "prod" : true|false, "qa" : true|false, "dev" : true|false }
+Default: All environments set to true.
+value.eventTriggers	Object	Required	Configurations specific to each event type. Values are of the format: "object": "[value.Type]" and are followed by configurations for the event.
+value.eventVariables	Array	Required	Variables specific to each event type.
+value.bufferingEventVariables	Array	Required	Variables that indicate if a buffering event has taken place.
+value.rules	Object	Required	Rules that dictate when an event listener is loaded on the page.
+Example request
+Copy to clipboard
+{
+  "versionTitle": "Adding Events",
+  "saveType": "saveAs",
+  "notes": "added a new event", 
+  "operationList": [
+    {
+      "op": "add",
+      "path": "/events",
+      "value":{
+        "object": "event",
+        "name": "new API event",
+        "notes": "event notes",
+        "status": "active",
+        "occurence": "Run Always",
+        "type": "youtubeVideo",
+        "scope": "After Load Rules",
+        "trackingEvent": "link",
+        "selectedTargets":{
+          "qa": true,
+          "dev": true,
+          "prod": true
+        },
+        "eventTriggers": {
+          "object": "youtubeVideo",
+           "enabledVideoEventsList": [
+            "play", "pause", "buffering", "milestones"
+          ],
+           "cssSelector": "mycss.selector",
+           "milestoneOption": "percentageComplete",
+           "milestonesList": [25,50,75,100],
+         },
+         "eventVariables":
+         [
+          {
+            "variable": "tealium_event",
+            "type": "text",
+            "value": "youTube_video"
+          }
+        ],
+         "bufferingEventVariables": [
+          {
+            "variable": "buffering",
+            "type": "text",
+            "value": "true"
+          }
+        ],
+         "rules": {
+          "apply": [ 
+            {
+              "and": [{"or": [{"uid": 52, "type": "loadRule"}]}]}
+            ],
+          "exclude": []
+        }
+      }
+    } 
+  ] 
+}
+PATCH operation parameters
+Instead of POST, PUT, and DELETE methods, the PATCH method uses the op parameter to specify the action to perform.
+
+The op parameter supports the following values:
+
+add - Create the component.
+replace - Update the component.
+remove - Delete the component.
+To specify the type and ID of the component, use the path parameter. The path parameter format is /{TYPE}/{ID}.
+
+For example, to add an event use:
+
+Copy to clipboard
+"op" : "add",
+"path" : "/events"
+To update a specific event, add the ID to the path:
+
+Copy to clipboard
+"op" : "replace",
+"path" : "/events/503"
+Create event
+This PATCH method takes a profile object and additional event fields.
+
+Example request
+Copy to clipboard
+{
+  "versionTitle": "Adding Events",
+  "saveType": "saveAs",
+  "notes": "added a new event", 
+  "operationList": [
+    {
+      "op": "add",
+      "path": "/events",
+      "value":{
+        "object": "event",
+        "name": "new API event",
+        "status": "active",
+        "occurence": "Run Always",
+        "type": "youtubeVideo",
+        "scope": "After Load Rules",
+        "trackingEvent": "link",
+        "selectedTargets":{
+          "qa": true,
+          "dev": true,
+          "prod": true
+        },
+        "eventTriggers": {
+          "object": "youtubeVideo",
+           "enabledVideoEventsList": [
+            "play", "pause", "buffering", "milestones"
+          ],
+           "cssSelector": "mycss.selector",
+           "milestoneOption": "percentageComplete",
+           "milestonesList": [25,50,75,100],
+         },
+         "eventVariables":
+         [
+          {
+            "variable": "tealium_event",
+            "type": "text",
+            "value": "youTube_video"
+          }
+        ],
+         "bufferingEventVariables": [
+          {
+            "variable": "buffering",
+            "type": "text",
+            "value": "true"
+          }
+        ],
+         "rules": {
+          "apply": [ 
+            {
+              "and": [{"or": [{"uid": 52, "type": "loadRule"}]}]}
+            ],
+          "exclude": []
+        }
+      }
+    } 
+  ] 
+}
+Update event
+This PATCH method takes a profile object and additional event fields.
+
+Example request
+Copy to clipboard
+{
+  "versionTitle": "Adding Events",
+  "saveType": "saveAs",
+  "notes": "added a new event", 
+  "operationList": [
+    {
+      "op": "replace",
+      "path": "/events/503",
+     "value":{
+        "object": "event",
+        "name": "new API event",
+        "status": "active",
+        "occurence": "Run Always",
+        "type": "youtubeVideo",
+        "scope": "After Load Rules",
+        "trackingEvent": "link",
+        "selectedTargets":{
+          "qa": true,
+          "dev": true,
+          "prod": true
+        },
+        "eventTriggers": {
+          "object": "youtubeVideo",
+           "enabledVideoEventsList": [
+            "play", "pause", "buffering", "milestones"
+          ],
+           "cssSelector": "mycss.selector",
+           "milestoneOption": "percentageComplete",
+           "milestonesList": [25,50,75,100],
+         },
+         "eventVariables":
+         [
+          {
+            "variable": "tealium_event",
+            "type": "text",
+            "value": "youTube_video"
+          }
+        ],
+         "bufferingEventVariables": [
+          {
+            "variable": "buffering",
+            "type": "text",
+            "value": "true"
+          }
+        ],
+         "rules": {
+          "apply": [ 
+            {
+              "and": [{"or": [{"uid": 52, "type": "loadRule"}]}]}
+            ],
+          "exclude": []
+        }
+      }
+    } 
+  ] 
+}
+Delete event
+This PATCH method takes a profile object and additional event fields.
+
+Example request
+Copy to clipboard
+{
+  "versionTitle": "Adding Events",
+  "saveType": "saveAs",
+  "notes": "added a new event", 
+  "operationList": [
+    {
+      "op": "remove",
+      "path": "/events/503",
+      "value":{
+        "object": "event"
+      }
+    }
+  ] 
+}
+Error messages
+Potential error messages for this endpoint:
+
+ERROR CODE	ERROR MESSAGE
+400	"Profile libraries are out of date, merge changes before patching profile - {ACCOUNT} | profile: {PROFILE}"
+"patchProfile.arg2.notes: must not be empty"
+404	"Profile not found - account: {ACCOUNT} | profile: {PROFILE}"
+"Profile library not found - account: {ACCOUNT} | profile: {PROFILE}"
+"Profile (legacy) not found - account: {ACCOUNT} | profile: {PROFILE}"
+"Latest version not found - {ACCOUNT} | profile: {PROFILE}"
+409	"Users are currently viewing the same account: {ACCOUNT} | profile: {PROFILE}"
+500	"Profile: {PROFILE} inherits from library profile"
+"Error saving profile metadata - account: {ACCOUNT} | profile: {PROFILE}"
+"Error saving profile - account: {ACCOUNT} | profile: {PROFILE}"
+"Error saving profile(legacy) - {ACCOUNT} | profile: {PROFILE}"
+
+
+iQ Variables API
+The iQ Variables API lets you programmatically create, update, and delete variables in an iQ Tag Management profile.
+
+To learn more about this API and available object fields, see iQ Profiles API and iQ Profiles Objects.
+
+How it works
+Use the PATCH method to create, update, and delete variables in the iQ Profile object.
+
+Copy to clipboard
+PATCH /v3/tiq/accounts/{ACCOUNT}/profiles/{PROFILE}
+When you use the PATCH method you are making changes to your profile variables programmatically using a save or save-as. After making changes with the API you must still log into the application to publish.
+
+Example cURL request
+Copy to clipboard
+curl --location --request PATCH 'https://platform.tealiumapis.com/v3/tiq/accounts/{account}/profiles/{profile}' \
+  --header 'Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzUx...MiJ9' \
+  --header 'Content-Type: application/json' \
+  --data '
+Authentication
+The bearer token is used to authenticate all API calls and not the API key. The API key is only used in the authentication call. In addition to the bearer token, the authentication response includes a region-specific hostname that must be used in subsequent server-side API calls.
+
+To learn about generating a bearer token from the API key, see Authentication.
+
+Profile fields
+Profile variables are JSON objects that contain the following possible fields:
+
+Field	Type	Required	Description
+versionTitle	String	Optional	The title of the resulting saved version.
+Default with saveType set to saveAs : API | {TIMESTAMP}
+Default with saveType set to save: Existing version title
+saveType	String	Optional	The type of save to perform with the PATCH request: save or saveAs. Default is saveAs.
+notes	String	Required	Additional notes about the publish version.
+operationList	Array	Required	A list of operation objects. For example, multiple variables.
+op	String	Required	The operation to perform: add, replace, or remove.
+path	String	Required	The component type and ID to update, in the format:/variables.
+value.object	String	Required	The object type being updated: variable or extension.
+value.name	String	Required (for add/replace)	The variable title.
+value.alias	String	Required	The variable name.
+value.type	String	Required	A prefix representing the variable type.
+ls - Local storage
+ss - Session storage
+udo - Universal Data Object
+qp - Query string parameter
+cp - Cookie
+js_page - JavaScript variable
+meta - Meta data element
+va - AudienceStream attribute (Read only. This type can be used in other iQ Profile API elements but cannot be created using the API.)
+value.notes	String	Optional	Notes about the variable.
+Example request
+Copy to clipboard
+{
+  "versionTitle":"Version 2022.03.22.2108",
+  "saveType": "saveAs",
+  "notes": "version notes here",
+  "operationList":[
+    {
+      "op":"add",
+      "path":"/variables",
+      "value":{
+        "object": "variable",
+        "name": "page_type",
+        "alias": "Page Type",
+        "type": "udo",
+        "notes":"udo variable"
+      }
+    }
+  ]
+}
+PATCH operation parameters
+Instead of POST, PUT, and DELETE methods, the PATCH method uses the op parameter to specify the action to perform.
+
+The op parameter supports the following values:
+
+add - Create the component.
+replace - Update the component.
+remove - Delete the component.
+To specify the type and ID of the component, use the path parameter. The path parameter format is /{TYPE}/{ID}.
+
+For example, to add a variable use:
+
+Copy to clipboard
+"op" : "add",
+"path" : "/variables"
+To update a specific variable, add the ID to the path:
+
+Copy to clipboard
+"op" : "replace",
+"path" : "/variables/503"
+Create variable
+This PATCH method takes a profile variable object and additional variable fields.
+
+Example request
+Copy to clipboard
+{
+  "versionTitle":"Version 2022.03.22.2108",
+  "saveType": "saveAs",
+  "notes": "version notes here",
+  "operationList":[
+    {
+      "op":"add",
+      "path":"/variables",
+      "value":{
+        "object": "variable",
+        "name": "page_type",
+        "alias": "Page Type",
+        "type": "udo",
+        "notes":"udo variable"
+      }
+    }
+  ]
+}
+Update variable
+This PATCH method takes a profile variable object and additional variable fields.
+
+Example request
+Copy to clipboard
+{
+  "versionTitle":"Version 2022.03.22.2108",
+  "saveType": "saveAs",
+  "notes": "version notes here",
+  "operationList":[
+    {
+      "op":"replace",
+      "path":"/variables/503",
+      "value":{
+        "object": "variable",
+        "name": "page_type",
+        "alias": "Page Type",
+        "type": "udo",
+        "notes":"udo variable"
+      }
+    }
+  ]
+}
+Delete variable
+This PATCH method takes a profile variable object and additional variable fields.
+
+Example request
+Copy to clipboard
+{
+  "versionTitle":"Version 2022.03.22.2108",
+  "saveType": "saveAs",
+  "notes": "version notes here",
+  "operationList":[
+    {
+      "op":"remove",
+      "path":"/variables/503",
+      "value":{
+        "object": "variable"
+      }
+    }
+  ]
+}
+Error messages
+Potential error messages for this endpoint:
+
+Error Code	Error Message
+400	"Profile libraries are out of date, merge changes before patching profile - {ACCOUNT} | profile: {PROFILE}"
+"Variable validation failed - variableId: {VARIABLE_ID} | {ACCOUNT} | profile: {PROFILE}. Cause: {CAUSE}"
+"patchProfile.arg2.notes: must not be empty"
+404	"Profile not found - account: {ACCOUNT} | profile: {PROFILE}"
+"Profile library not found - account: {ACCOUNT} | profile: {PROFILE}"
+"Profile (legacy) not found - account: {ACCOUNT} | profile: {PROFILE}"
+"Users are currently viewing the same account: {ACCOUNT} | profile: {PROFILE}"
+"Latest version not found - {ACCOUNT} | profile: {PROFILE}"
+409	"Error saving profile: {PROFILE} for account: {ACCOUNT}, duplicate versions: {VERSION}"
+500	"Profile: {PROFILE} inherits from library profile"
+"Error saving profile metadata - account: {ACCOUNT} | profile: {PROFILE}"
+"Error saving profile - account: {ACCOUNT} | profile: {PROFILE}"
+"Error saving profile(legacy) - {ACCOUNT} | profile: {PROFILE}"
+
+
+iQ Load Rules API
+The iQ Variables API lets you programmatically create, update, and delete load rules in an iQ Tag Management profile.
+
+To learn more about this API and available object fields, see iQ Profiles API and iQ Profiles Objects.
+
+How it works
+Use the PATCH method to create, update, and delete load rules in the iQ Profile object.
+
+Copy to clipboard
+PATCH /v3/tiq/accounts/{ACCOUNT}/profiles/{PROFILE}
+When you use the PATCH method you are making changes to your profile load rules programmatically using a save or save-as. After making changes with the API you must still log into the application to publish.
+
+Example cURL request
+Copy to clipboard
+curl --location --request PATCH 'https://platform.tealiumapis.com/v3/tiq/accounts/{ACCOUNT}/profiles/{PROFILE}' \
+  --header 'Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzUx...MiJ9' \
+  --header 'Content-Type: application/json' \
+  --data '
+Authentication
+The bearer token is used to authenticate all API calls and not the API key. The API key is only used in the authentication call. In addition to the bearer token, the authentication response includes a region-specific hostname that must be used in subsequent server-side API calls.
+
+To learn about generating a bearer token from the API key, see Authentication.
+
+Profile fields
+Profile load rules are JSON objects that contain the following possible fields:
+
+FIELD	TYPE	REQUIRED	DESCRIPTION
+versionTitle	String	Optional	The title of the resulting saved version.
+Default with saveType set to saveAs : API | {TIMESTAMP}
+Default with saveType set to save: Existing version title
+saveType	String	Optional	The type of save to perform with the PATCH request: save or saveAs. Default is saveAs.
+notes	String	Required	Additional notes about the publish version.
+op	String	Required	The operation to perform: add, replace, or remove.
+path	String	Required	The component type and ID to update, in the format:/loadRules.
+value.object	String	Required	The object type being updated: variable, loadRule, or extension.
+value.name	String	Required (for add/replace)	The name of load rule.
+value.status	String	Required	The on/off status: active or inactive.
+value.notes	String	Optional	Notes about the load rule.
+value.startDate	Date	Optional if value.endDate is empty.	For scheduled load rules, the start date. Date format must be yyyyMMddHHmm.
+value.endDate	Date	Optional	For scheduled load rules, the end date. Date format must be yyyyMMddHHmm.
+value.conditions	Array[object]	Required	An array of objects that include variable name, operator, and value. Each object within an array is associated by an andoperator while each array within the array is associated by an or operator. The following operators do not accept a value:
+is defined
+is badge assigned
+is badge not assigned
+is not defined
+is not populated
+Example request
+Copy to clipboard
+{
+  "versionTitle": "Adding Rule",
+  "saveType": "saveAs",
+  "notes": "version notes here", 
+  "operationList": [
+    {
+      "op": "add",
+      "path": "/loadRules",
+      "value":{
+        "object": "loadRule",
+        "name": "new rule API Dom variable",
+        "status": "active",
+        "notes": "Load Rule notes here",
+        "startDate": "202202020000",
+        "endDate": "202202020000",
+        "conditions": [
+          [
+            {
+              "variable": "udo.new_name",
+              "operator": "does_not_equal",
+              "value": 10
+            }
+          ]
+        ]   
+      }
+    }
+  ] 
+}
+PATCH Operation Parameters
+Instead of POST, PUT, and DELETE methods, the PATCH method uses the op parameter to specify the action to perform.
+
+The op parameter supports the following values:
+
+add - Create the component.
+replace - Update the component.
+remove - Delete the component.
+To specify the type and ID of the component, use the path parameter. The path parameter format is /{TYPE}/{ID}.
+
+For example, to add a load rule use:
+
+Copy to clipboard
+"op" : "add",
+"path" : "/loadRules"
+To update a specific load rule, add the ID to the path:
+
+Copy to clipboard
+"op" : "replace",
+"path" : "/loadRules/503"
+Create load rule
+This PATCH method takes a profile load rule object and additional load rule fields.
+
+Example request
+Copy to clipboard
+{
+  "versionTitle": "Adding Rule",
+  "saveType": "saveAs",
+  "notes": "version notes here", 
+  "operationList": [
+    {
+      "op": "add",
+      "path": "/loadRules",
+      "value":{
+        "object": "loadRule",
+        "name": "new rule API Dom variable",
+        "status": "active",
+        "notes": "Load Rule notes here",
+        "startDate": "202202020000",
+        "endDate": "202202020000",
+        "conditions": [
+          [
+            {
+              "variable": "udo.new_name",
+              "operator": "does_not_equal",
+              "value": 10
+            }
+          ]
+        ]   
+      }
+    }
+  ] 
+}
+Update load rule
+This PATCH method takes a profile load rule object and additional load rule fields.
+
+Example request
+Copy to clipboard
+{
+  "versionTitle": "Adding Rule",
+  "saveType": "saveAs",
+  "notes": "version notes here", 
+  "operationList": [
+    {
+      "op": "replace",
+      "path": "/loadRules/49",
+      "value":{
+        "object": "loadRule",
+        "name": "new rule API Dom variable",
+        "status": "active",
+        "notes": "Load Rule notes here",
+        "startDate": "202202020000",
+        "endDate": "202202020000",
+        "conditions": [
+          [
+            {
+              "variable": "udo.new_name",
+              "operator": "does_not_equal",
+              "value": 10
+            }
+          ]
+        ]   
+      }
+    }
+  ] 
+}
+Delete load rule
+This PATCH method takes a profile load rules object and additional load rules fields.
+
+Example request
+Copy to clipboard
+{
+  "versionTitle": "Adding Rule",
+  "saveType": "saveAs",
+  "notes": "version notes here", 
+  "operationList": [
+    {
+      "op": "remove",
+      "path": "/loadRules/49",
+      "value":{
+        "object": "loadRule"
+      }
+    }
+  ]
+}
+Error messages
+Potential error messages for this endpoint:
+
+ERROR CODE	ERROR MESSAGE
+400	"Validate patch request failed due to %s"
+"Cannot set tag scope extension with tags that do not exist, id: {ID} - {ACCOUNT} | profile: {PROFILE}"
+"Cannot set extension scope to sync if the setting is not turned on - {ACCOUNT} | profile: {PROFILE}"
+"Error in getting next extension id - {ACCOUNT} | profile: {PROFILE}"
+"Profile libraries are out of date, merge changes before patching profile - {ACCOUNT} | profile: {PROFILE}"
+"Not Supported"
+"patchProfile.arg2.notes: must not be empty"
+404	"Account: {ACCOUNT}, profile: {PROFILE} not found"
+409	"Users are currently viewing the same account: {ACCOUNT} profile: {PROFILE}"
+Error saving profile: {PROFILE} for account: {ACCOUNT}, duplicate versions: {VERSIONS}
+500	"An error occurred"
+"Profile: {PROFILE} inherits from library profile"
+"Unable to invoke request: unknown host, see logs for more detail."
+"Error saving profile metadata - account: {ACCOUNT} | profile: {PROFILE}"
+"Error saving profile - account: {ACCOUNT} | profile: {PROFILE}"
+"Error saving profile(legacy) - {ACCOUNT} | profile: {PROFILE}"
+
+
+iQ Tags API
+The iQ Tags API lets you programmatically create, update, and delete tag configurations in an iQ Tag Management profile.
+
+To learn more about this API and available object fields, see iQ Profiles API and iQ Profiles Objects.
+
+How it works
+Use the PATCH method to create, update, and delete components in the iQ Profile object.
+
+Copy to clipboard
+PATCH /v3/tiq/accounts/{ACCOUNT}/profiles/{PROFILE}
+When you use the PATCH method, you are making changes to your profile tags programmatically using a save or save-as. After making changes with the API, you must still log into the application to publish.
+
+Example cURL request
+Copy to clipboard
+curl --location --request PATCH 'https://platform.tealiumapis.com/v3/tiq/accounts/{ACCOUNT}/profiles/{PROFILE}' \
+  --header 'Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzUx...MiJ9'  \
+  --header 'Content-Type: application/json' \
+  --data '
+Authentication
+The bearer token is used to authenticate all API calls and not the API key. The API key is only used in the authentication call. In addition to the bearer token, the authentication response includes a region-specific hostname that must be used in subsequent server-side API calls.
+
+To learn about generating a bearer token from the API key, see Authentication.
+
+Profile fields
+Profile tags are JSON objects that contain the following possible fields:
+
+OBJECT	TYPE	REQUIRED	DESCRIPTION
+versionTitle	String	Optional	The title of the resulting saved version.
+Default with saveType set to saveAs : API | {TIMESTAMP}
+Default with saveType set to save: Existing version title
+saveType	String	Optional	The type of save to perform with the PATCH request: save or saveAs. Default is saveAs.
+notes	String	Required	Additional notes about the publish version.
+operationList	Array	Required	A list of operation objects. For example, multiple tags.
+op	String	Required	The operation to perform: add, replace, or remove.
+path	String	Required	The component type and ID to update, in the format:/{TYPE}/{ID}.
+value.object	String	Required	The object type being updated: variable, extension, event, or tag.
+value.tagID	String	Required	The unique tag template ID. Use a GET request to retrieve the tag ID. Note that this value is different from the tag UID.
+value.status	String	Optional	The on/off status: active or inactive.
+value.notes	String	Optional	Notes about the tag.
+value.name	String	Required (for add/replace)	Name of the tag.
+value.selectedTargets	Map <string, Boolean>	Optional	An object of environments to publish the component to. { "prod" : true|false, "qa" : true|false, "dev" : true|false }
+Default: All environments set to true.
+value.configuration	Map <String, Object>	Optional	A String and Object Map of tag configurations made available by the vendor. Configurations are specific to each tag. For more information, see the documentation for your tag.
+value.advancedConfiguration	Object	Optional	A set of advanced configurations corresponding to the tag configuration settings.
+advConfigBundle — True or False
+advConfigLoadType — True or False
+advConfigOptOut — True
+advConfigSend— True or False
+advConfigSrc — Text field
+tagTiming — DOM Ready or Prioritized
+value.rules	Object	Optional	The load rules to apply or exclude from the tag.
+value.dataMappings	Map <String, String>	Optional	An object that contains the Tealium IQ variable and its corresponding mapped destination, the variable name, and the data type. You can verify the specific format for the mapped variable triggers in the Data Mappings screen in your tag configuration.
+value.dataMappings.variable	String	Optional	The name of the variable to be mapped.
+value.dataMappings.type	String	Optional	The data type of the variable to be mapped. This field supports the following variable types:
+ls - Local storage
+ss - Session storage
+udo - Universal Data Object
+qp - Query string parameter
+cp - Cookie
+js_page - JavaScript variable
+dom - DOM variable
+meta - Meta data element
+static.text - Static text
+static.js - JavaScript code
+value.dataMappings.mappings	String or Array of Strings	Optional	The mapped destination for the variable.
+Example request
+Copy to clipboard
+{
+  "versionTitle": "version title",
+  "notes": "notes",
+  "operationList": [
+    {
+      "op": "add",
+      "path": "/tags",
+      "value": {
+        "object": "tag",
+        "tagId": "7133",
+        "status": "active",
+        "notes": "adding tag",
+        "name": "7133 tag Google Analytics",
+        "dataMappings": [
+          {
+            "variable": "variable_name",
+            "type": "udo",
+            "mappings": ["a1", "a2"]
+          }
+        ],
+        "selectedTargets": {
+          "qa": true,
+          "dev": true,
+          "prod": true
+        },
+        "advancedConfiguration": {
+          "bundleFlag": true,
+          "syncLoadType": false,
+          "optout": true,
+          "scriptSource": "",
+          "sendFlag": false,
+          "tagTiming": "Dom Ready"
+        },
+        "configuration": {
+          "tracking_id": "123"
+        },
+        "rules": {
+          "apply": [{"and": [{"or": [{"uid": "2", "type": "loadRule"}]}]}],
+          "exclude": [{"and": [{"or": [{"uid": "3", "type": "loadRule"}, {"uid": "2", "type": "loadRule"}]}]}]
+        }
+      }
+    }
+  ]
+}
+PATCH operation parameters
+Instead of POST, PUT, and DELETE methods, the PATCH method uses the op parameter to specify the action to perform.
+
+The op parameter supports the following values:
+
+add - Create the component.
+replace - Update the component.
+remove - Delete the component.
+To specify the type and ID of the component, use the path parameter. The path parameter format is /{TYPE}/{ID}.
+
+For example, to add a tag use:
+
+Copy to clipboard
+"op" : "add",
+"path" : "/tags"
+To update a specific tag, add the ID to the path:
+
+Copy to clipboard
+"op" : "replace",
+"path" : "/tags/503"
+Create tag
+This PATCH method takes a profile object and additional tag fields.
+
+Example request
+Copy to clipboard
+{
+  "versionTitle": "version title",
+  "notes": "notes",
+  "operationList": [
+    {
+      "op": "add",
+      "path": "/tags",
+      "value": {
+        "object": "tag",
+        "tagId": "7133",
+        "status": "active",
+        "notes": "adding tag",
+        "name": "7133 tag Google Analytics",
+        "dataMappings": [
+          {
+            "variable": "variable_name",
+            "type": "udo",
+            "mappings": ["a1", "a2"]
+          }
+        ],
+        "selectedTargets": {
+          "qa": true,
+          "dev": true,
+          "prod": true
+        },
+        "advancedConfiguration": {
+          "bundleFlag": true,
+          "syncLoadType": false,
+          "optout": true,
+          "scriptSource": "",
+          "sendFlag": false,
+          "tagTiming": "Dom Ready"
+        },
+        "Configuration": {
+          "tracking_id": "123"
+        },
+        "rules": {
+          "apply": [{"and": [{"or": [{"uid": "2", "type": "loadRule"}]}]}],
+          "exclude": [{"and": [{"or": [{"uid": "3", "type": "loadRule"}, {"uid": "2", "type": "loadRule"}]}]}]
+        }
+      }
+    }
+  ]
+}
+Update tag
+This PATCH method takes a profile object and additional tag fields.
+
+Example request
+Copy to clipboard
+{
+  "versionTitle": "version title",
+  "notes": "notes",
+  "operationList": [
+    {
+      "op": "replace",
+      "path": "/tags/21",
+      "value": {
+        "object": "tag",
+        "tagId": "7133",
+        "status": "active",
+        "notes": "adding tag",
+        "name": "Replace name by API Google Analytics",
+        "dataMappings": [
+          {
+            "variable": "variable_name",
+            "type": "udo",
+            "mappings": ["a1", "a2"]
+          }
+        ],
+        "selectedTargets": {
+          "qa": true,
+          "dev": true,
+          "prod": true
+        },
+        "advancedConfiguration": {
+          "bundleFlag": true,
+          "syncLoadType": false,
+          "optout": true,
+          "scriptSource": "",
+          "sendFlag": false,
+          "tagTiming": "Dom Ready"
+        },
+        "Configuration": {
+          "tracking_id": "123"
+        },
+        "rules": {
+          "apply": [{"and": [{"or": [{"uid": "2", "type": "loadRule"}]}]}],
+          "exclude": [{"and": [{"or": [{"uid": "3", "type": "loadRule"}, {"uid": "2", "type": "loadRule"}]}]}]
+        }
+      }
+    }
+  ]
+}
+Delete tag
+This PATCH method takes a profile object and additional tag fields.
+
+Example request
+Copy to clipboard
+{
+  "versionTitle": "Version 2022.03.22.2108",
+  "saveType": "saveAs",
+  "notes":"",
+  "operationList": [
+    {
+      "op": "remove",
+      "path": "/tags/230",
+      "value":{
+        "object":"tag"
+      }
+    }
+  ]
+}
+Error messages
+Potential error messages for this endpoint:
+
+ERROR CODE	ERROR MESSAGE
+400	"Profile libraries are out of date, merge changes before patching profile - {ACCOUNT} | profile: {PROFILE}"
+"patchProfile.arg2.notes: must not be empty"
+404	"Profile not found - account: {ACCOUNT} | profile: {PROFILE}"
+"Profile library not found - account: {ACCOUNT} | profile: {PROFILE}"
+"Profile (legacy) not found - account: {ACCOUNT} | profile: {PROFILE}"
+"Users are currently viewing the same account: {ACCOUNT} | profile: {PROFILE}"
+"Latest version not found - {ACCOUNT} | profile: {PROFILE}"
+409	"Error saving profile: {PROFILE} for account: {ACCOUNT}, duplicate versions: {VERSION}"
+500	"Profile: {PROFILE} inherits from library profile"
+"Error saving profile metadata - account: {ACCOUNT} | profile: {PROFILE}"
+"Error saving profile - account: {ACCOUNT} | profile: {PROFILE}"
+"Error saving profile(legacy) - {ACCOUNT} | profile: {PROFILE}"
+
+
+iQ Tag Template API
+The iQ Tag Template API uses a PATCH method to update profile tag templates.
+
+To learn more about this API and available object fields, see iQ Profiles API and iQ Profiles Objects.
+
+How it works
+After you create a tag, you can use the iQ Tag Template API to edit the tag template.
+
+Use the PATCH method to update components in the iQ Profile object.
+
+Copy to clipboard
+PATCH /v3/tiq/accounts/{ACCOUNT}/profiles/{PROFILE}/templates/{TEMPLATE_ID}
+When you use the PATCH method, you are making changes to your profile tag templates programmatically using a save or save-as. After making changes with the API, you must still log into the application to publish.
+
+Example cURL request
+Copy to clipboard
+curl --location --request PATCH \
+  --url https://platform.tealiumapis.com/v3/tiq/accounts/{ACCOUNT}/profiles/{PROFILE}/templates/79 \
+  --header 'Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzUx...MiJ9' \
+  --header 'Content-Type: application/json' \
+  --data '
+Authentication
+The bearer token is used to authenticate all API calls and not the API key. The API key is only used in the authentication call. In addition to the bearer token, the authentication response includes a region-specific hostname that must be used in subsequent server-side API calls.
+
+To learn about generating a bearer token from the API key, see Authentication.
+
+Profile fields
+Profile tag templates are JSON objects that contain the following possible fields:
+
+OBJECT	TYPE	REQUIRED	DESCRIPTION
+versionTitle	String	Optional	The title of the resulting saved version.
+Default with saveType set to saveAs : API | {TIMESTAMP}
+Default with saveType set to save: Existing version title
+saveType	String	Optional	The type of save to perform with the PATCH request: save or saveAs. Default is saveAs.
+notes	String	Required	Additional notes about the publish version.
+templateData.content	Object	Required	The tag template content you want to update.
+Example response
+Copy to clipboard
+{
+  "versionTitle": "Version 2022.03.22.2108",
+  "saveType": "saveAs",
+  "notes": "version notes",
+  "templateData": {
+    "content": "testing a template update"
+  }
+}
+PATCH operation parameters
+To add or remove a tag template, you must add or remove the tag.
+
+Update tag template
+This PATCH method takes a profile object and additional tag template fields.
+
+Example request
+Copy to clipboard
+{
+  "versionTitle": "test version",
+  "saveType": "saveAs",
+  "notes": "version notes",
+  "templateData": {
+    "content": "testing a template update"
+  }
+}
+Error messages
+Potential error messages for this endpoint:
+
+ERROR CODE	ERROR MESSAGE
+400	"Profile libraries are out of date, merge changes before patching profile - {ACCOUNT} | profile: {PROFILE}"
+"patchProfile.arg2.notes: must not be empty"
+404	"Profile not found - account: {ACCOUNT} | profile: {PROFILE}"
+"Profile library not found - account: {ACCOUNT} | profile: {PROFILE}"
+"Profile (legacy) not found - account: {ACCOUNT} | profile: {PROFILE}"
+"Users are currently viewing the same account: {ACCOUNT} | profile: {PROFILE}"
+"Latest version not found - {ACCOUNT} | profile: {PROFILE}"
+409	"Error saving profile: {PROFILE} for account: {ACCOUNT}, duplicate versions: {VERSION}"
+500	"Profile: {PROFILE} inherits from library profile"
+"Error saving profile metadata - account: {ACCOUNT} | profile: {PROFILE}"
+"Error saving profile - account: {ACCOUNT} | profile: {PROFILE}"
+"Error saving profile(legacy) - {ACCOUNT} | profile: {PROFILE}"
