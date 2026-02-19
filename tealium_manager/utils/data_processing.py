@@ -210,3 +210,29 @@ def diff_revisions(rev1: Dict[str, Any], rev2: Dict[str, Any]) -> Dict[str, Dict
     print("DEBUG: Final diff object being returned:")
     print(json.dumps(diff_results, indent=2))
     return diff_results
+
+
+def format_date_range_readable(date_key: str) -> str:
+    """
+    Converts a date range key string into a human-readable format.
+    Example: "20231026T000000_20231101T235959" -> "26/10/2023 - 01/11/2023"
+    Example: "AUDIT_EXEC_20231026" -> "Audit du 26/10/2023"
+    """
+    if not date_key:
+        return "N/A"
+    
+    try:
+        if date_key.startswith("AUDIT_EXEC_"):
+            date_part = date_key.replace("AUDIT_EXEC_", "")
+            dt_obj = datetime.datetime.strptime(date_part, "%Y%m%d")
+            return f"Audit du {dt_obj.strftime('%d/%m/%Y')}"
+        
+        if "_" in date_key:
+            start_str, end_str = date_key.split('_')
+            start_dt = datetime.datetime.strptime(start_str, "%Y%m%dT%H%M%S")
+            end_dt = datetime.datetime.strptime(end_str, "%Y%m%dT%H%M%S")
+            return f"{start_dt.strftime('%d/%m/%Y')} - {end_dt.strftime('%d/%m/%Y')}"
+    except (ValueError, TypeError):
+        return date_key
+        
+    return date_key

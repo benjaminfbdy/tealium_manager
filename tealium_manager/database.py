@@ -84,6 +84,7 @@ def initialize_database():
             organization_id TEXT,
             private_key TEXT,
             manual_access_token TEXT,
+            secret_key_name TEXT,
             is_active BOOLEAN DEFAULT 0
         )
     """)
@@ -104,6 +105,9 @@ def initialize_database():
     if 'manual_access_token' not in adobe_columns:
         print("MIGRATING SCHEMA: Adding 'manual_access_token' to 'adobe_configurations' table.")
         cursor.execute("ALTER TABLE adobe_configurations ADD COLUMN manual_access_token TEXT")
+    if 'secret_key_name' not in adobe_columns:
+        print("MIGRATING SCHEMA: Adding 'secret_key_name' to 'adobe_configurations' table.")
+        cursor.execute("ALTER TABLE adobe_configurations ADD COLUMN secret_key_name TEXT")
 
     # Table for caching Adobe Analytics components per RSID
     cursor.execute("""

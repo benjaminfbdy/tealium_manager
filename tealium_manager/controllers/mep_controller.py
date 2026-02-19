@@ -1,30 +1,33 @@
 from utils.tealium_client import TealiumClient
 from database import get_cached_data, set_cached_data
-from utils.tealium_repo import get_active_configuration
 from utils.data_processing import build_uid_to_name_map, diff_revisions
 from typing import List, Dict, Any, Optional
 import streamlit as st
 
-def _create_proxies_dict(settings: Dict) -> Optional[Dict]:
-    """Helper to create a proxy dictionary if credentials are provided."""
-    proxy_user = settings.get("proxy_user")
-    proxy_password = settings.get("proxy_password")
-    if proxy_user and proxy_password:
-        proxy_host = None  # TODO: Configure proxy via environment variables if needed
-        proxy_port = "8080"
-        proxy_url_base = f"{proxy_host}:{proxy_port}"
-        proxy_auth_url = f"http://{proxy_user}:{proxy_password}@{proxy_url_base}"
-        return {"http": proxy_auth_url, "https": proxy_auth_url}
+def _create_proxies_dict(config: Dict) -> Optional[Dict]:
+    """Helper to create a proxy dictionary if credentials are provided in secrets."""
+    try:
+        if 'proxy' in st.secrets and st.secrets.proxy:
+            proxy_config = st.secrets.proxy.to_dict()
+            proxy_user = proxy_config.get("user")
+            proxy_password = proxy_config.get("password")
+            if proxy_user and proxy_password:
+                proxy_host = proxy_config.get("host", "your.proxy.host.com")
+                proxy_port = proxy_config.get("port", "8080")
+                proxy_url_base = f"{proxy_host}:{proxy_port}"
+                proxy_auth_url = f"http://{proxy_user}:{proxy_password}@{proxy_url_base}"
+                return {"http": proxy_auth_url, "https": proxy_auth_url}
+    except AttributeError:
+        pass
     return None
 
-def get_meps_data() -> Optional[List[Dict]]:
+def get_meps_data(active_config: Dict) -> Optional[List[Dict]]:
     """
-    Fetches the revision history for the active Tealium iQ profile, using a cache,
+    Fetches the revision history for the given Tealium iQ profile, using a cache,
     and filters them to only include revisions published to 'prod'.
     """
-    active_config = get_active_configuration()
     if not active_config:
-        st.error("Error: No active configuration found.")
+        st.error("Error: No active configuration provided.")
         return None
 
     account = active_config.get("account")
@@ -36,12 +39,12 @@ def get_meps_data() -> Optional[List[Dict]]:
         client = TealiumClient(
             account=account,
             profile=profile,
-            api_key=active_config.get("api_key"),
-            email=active_config.get("email"),
+            api_key=active_config.get("tealium_api_key"),
+            email=active_config.get("tealium_api_username"),
             proxies=proxies
         )
-    except ValueError as e:
-        st.error(f"Error initializing TealiumClient: {e}")
+    except (ValueError, AttributeError) as e:
+        st.error(f"Error initializing TealiumClient. Check your secrets.toml file. Details: {e}")
         return None
 
     # Step 1: Get revision IDs
@@ -88,14 +91,13 @@ def get_meps_data() -> Optional[List[Dict]]:
     
     return prod_revisions
 
-def get_mep_comparison_data(rev_id_1: str, rev_id_2: str) -> Dict[str, Any]:
+def get_mep_comparison_data(active_config: Dict, rev_id_1: str, rev_id_2: str) -> Dict[str, Any]:
     """
     Fetches details for two specific revisions using the V3 API, builds a combined UID map,
     calculates the diff, and returns a data package for the comparison view.
     """
-    active_config = get_active_configuration()
     if not active_config:
-        return {"error": "No active configuration found."}
+        return {"error": "No active configuration provided."}
         
     account = active_config.get("account")
     profile = active_config.get("profile")
@@ -115,7 +117,8 @@ def get_mep_comparison_data(rev_id_1: str, rev_id_2: str) -> Dict[str, Any]:
             proxies = _create_proxies_dict(active_config)
             client = TealiumClient(
                 account=account, profile=profile, 
-                api_key=active_config.get("api_key"), email=active_config.get("email"),
+                api_key=active_config.get("tealium_api_key"), 
+                email=active_config.get("tealium_api_username"),
                 proxies=proxies
             )
             # Use the V3 get_profile_components method
@@ -129,8 +132,8 @@ def get_mep_comparison_data(rev_id_1: str, rev_id_2: str) -> Dict[str, Any]:
             else:
                 st.error(f"API Error for revision {rev_id}: {response.get('message')}")
                 return None
-        except ValueError as e:
-            st.error(f"Error initializing TealiumClient: {e}")
+        except (ValueError, AttributeError) as e:
+            st.error(f"Error initializing TealiumClient. Check secrets.toml. Details: {e}")
             return None
     
     st.info(f"Chargement des composants pour la MEP {rev_id_1}...")

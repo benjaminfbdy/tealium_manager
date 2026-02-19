@@ -76,6 +76,8 @@ def _render_adobe_section(
     adobe_config_to_edit: Optional[Dict[str, str]] = None
 ) -> Dict[str, any]:
     """Renders the UI for managing Adobe Analytics configurations."""
+    from controllers.config_controller import get_available_adobe_secret_keys
+
     result = {"action": None, "data": None}
     st.header("Configurations Adobe Analytics")
 
@@ -85,6 +87,7 @@ def _render_adobe_section(
             st.json(st.session_state['adobe_discovery_result'])
             if st.button("Fermer le résultat du test"):
                 st.session_state['adobe_discovery_result'] = None
+                st.rerun()
 
     # --- List Existing Configurations ---
     if not all_adobe_configurations and not adobe_config_to_edit:
@@ -93,15 +96,13 @@ def _render_adobe_section(
     for config in all_adobe_configurations:
         is_active = config.get('name') == active_adobe_config_name
         status = " (Actif)" if is_active else ""
-        
-        auth_method = config.get('auth_method', 'jwt')
-        auth_method_display = {"jwt": "JWT", "oauth": "OAuth 2.0", "manual": "Token Manuel"}.get(auth_method, "Inconnu")
+        secret_key_used = config.get('secret_key_name', 'N/A')
 
         with st.container():
             st.subheader(f"Profil : {config.get('name')}{status}")
             columns = st.columns([2, 2, 1, 1, 1, 1])
             columns[0].text(f"Company ID: {config.get('global_company_id')}")
-            columns[1].text(f"Méthode d'auth: {auth_method_display}")
+            columns[1].text(f"Jeu d'identifiants: {secret_key_used}")
             
             if not is_active:
                 if columns[2].button("Activer", key=f"activate_adobe_{config['name']}"):
@@ -125,63 +126,54 @@ def _render_adobe_section(
     form_title = f"Modifier la Configuration : {adobe_config_to_edit['name']}" if is_editing else "Ajouter une Nouvelle Configuration Adobe"
     
     with st.expander(form_title, expanded=is_editing or not all_adobe_configurations):
-        # Use a different key for the form in edit vs add mode to prevent state conflicts
         form_key = f"adobe_edit_form_{adobe_config_to_edit['name']}" if is_editing else "add_new_adobe_config_form"
         
         with st.form(form_key):
-            st.write("Entrez les détails de votre projet Adobe Developer Console.")
+            st.write("Entrez les détails de votre configuration Adobe (utilise l'authentification OAuth 2.0).")
             
-            # Default to the config being edited, or empty strings
             cfg = adobe_config_to_edit or {}
 
-            name = st.text_input("Nom de la Configuration", value=cfg.get("name", ""), disabled=False)
-            
-            auth_method_options = ['oauth', 'jwt', 'manual']
-            try:
-                auth_index = auth_method_options.index(cfg.get("auth_method", 'oauth'))
-            except ValueError:
-                auth_index = 0
+            name = st.text_input("Nom de la Configuration", value=cfg.get("name", ""))
+            global_company_id = st.text_input("Global Company ID (ex: `banque0`, `bpce1`)", value=cfg.get("global_company_id", ""))
 
-            auth_method = st.radio(
-                "Méthode d'authentification",
-                options=auth_method_options,
-                index=auth_index,
-                format_func=lambda x: {"oauth": "OAuth 2.0 (Recommandé)", "jwt": "JWT (Legacy)", "manual": "Token Manuel (Debug)"}.get(x, x),
-                horizontal=True
-            )
-            
-            api_key = st.text_input("Clé API (Client ID)", value=cfg.get("api_key", ""))
-            global_company_id = st.text_input("Global Company ID", value=cfg.get("global_company_id", ""))
+            # --- Selectbox for Secret Key ---
+            available_secret_keys = get_available_adobe_secret_keys()
+            selected_secret_key = None
 
+            if not available_secret_keys:
+                st.warning("Aucun jeu d'identifiants Adobe n'a été trouvé dans votre fichier secrets.toml. Veuillez le configurer.")
+            else:
+                try:
+                    secret_key_index = available_secret_keys.index(cfg.get("secret_key_name")) if cfg.get("secret_key_name") in available_secret_keys else 0
+                except ValueError:
+                    secret_key_index = 0
+                
+                selected_secret_key = st.selectbox(
+                    "Jeu d'identifiants à utiliser (défini dans secrets.toml)",
+                    options=available_secret_keys,
+                    index=secret_key_index
+                )
+
+            # --- Data to be saved ---
             data_to_save = {
                 "name": name,
                 "original_name": cfg.get("name") if is_editing else None,
-                "auth_method": auth_method,
-                "api_key": api_key,
+                "auth_method": "oauth", # Hardcoded to oauth
                 "global_company_id": global_company_id,
-                "is_active": cfg.get("is_active", False) # Preserve active state when editing
+                "is_active": cfg.get("is_active", False),
+                "secret_key_name": selected_secret_key
             }
 
-            if auth_method == 'oauth':
-                st.info("Pour l'authentification OAuth 2.0, le Client ID et le Client Secret sont requis.")
-                data_to_save["client_secret"] = st.text_input("Client Secret", type="password", value=cfg.get("client_secret", ""))
-            elif auth_method == 'jwt':
-                st.info("Pour l'authentification JWT, tous les champs suivants sont requis.")
-                data_to_save["client_secret"] = st.text_input("Client Secret", type="password", value=cfg.get("client_secret", ""))
-                data_to_save["technical_account_id"] = st.text_input("Technical account ID", value=cfg.get("technical_account_id", ""))
-                data_to_save["organization_id"] = st.text_input("Organization ID", value=cfg.get("organization_id", ""))
-                data_to_save["private_key"] = st.text_area("Clé Privée", value=cfg.get("private_key", ""), help="Collez le contenu du fichier .key")
-            else: # manual
-                st.info("Collez un 'Access Token' valide généré depuis la console Adobe Developer.")
-                data_to_save["manual_access_token"] = st.text_area("Access Token Manuel", value=cfg.get("manual_access_token", ""))
+            st.info(f"Les identifiants (Client ID, Secret) pour cette configuration seront lus depuis le jeu '{selected_secret_key}' de votre fichier secrets.toml.")
 
             # --- Form Buttons ---
             submit_cols = st.columns(2)
-            if submit_cols[0].form_submit_button("Enregistrer les Modifications" if is_editing else "Enregistrer la Nouvelle Configuration"):
-                if not all([name, api_key, global_company_id]):
-                    st.error("Le nom, l'API Key et le Global Company ID sont toujours requis.")
+            if submit_cols[0].form_submit_button("Enregistrer"):
+                if not all([name, global_company_id]):
+                    st.error("Le Nom de la Configuration et le Global Company ID sont requis.")
+                elif not selected_secret_key:
+                     st.error("Veuillez sélectionner un jeu d'identifiants.")
                 else:
-                    # Use a single action name for saving, whether adding or editing
                     result = {"action": "save_adobe_config", "data": data_to_save}
             
             if is_editing and submit_cols[1].form_submit_button("Annuler"):

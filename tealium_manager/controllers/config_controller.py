@@ -1,83 +1,62 @@
+import streamlit as st
+from typing import Dict, Optional
+from urllib.parse import quote
+
+# Import clients and repo functions that are still needed (for caching, etc.)
 from utils.tealium_client import TealiumClient
 from utils.adobe_client import AdobeAnalyticsClient
-from utils.tealium_repo import (
-    save_configuration, 
-    load_all_configurations, 
-    get_active_configuration, 
-    set_active_configuration, 
-    delete_configuration,
-    cache_profile_data
-)
-from utils.adobe_repo import (
-    save_adobe_configuration, load_all_adobe_configurations, get_active_adobe_configuration,
-    load_adobe_configuration_by_name,
-    set_active_adobe_configuration, delete_adobe_configuration,
-    rename_adobe_configuration
-)
-from database import (
-    get_db_status, reset_database,
-    save_global_settings, load_global_settings
-)
-from typing import Dict, List, Optional
-from urllib.parse import quote
+from utils.tealium_repo import cache_profile_data
+from database import get_db_status, reset_database
 
 # --- Helper Functions ---
 
-def _create_proxies_dict(settings: Dict) -> Optional[Dict]:
-    """Helper to create a proxy dictionary if credentials are provided."""
-    proxy_user = settings.get("proxy_user")
-    proxy_password = settings.get("proxy_password")
-    if proxy_user and proxy_password:
-        proxy_host = None  # TODO: Configure proxy via environment variables if needed
-        proxy_port = "8080"
-        # URL-encode user and password to handle special characters
-        encoded_user = quote(proxy_user)
-        encoded_password = quote(proxy_password)
-        proxy_auth_url = f"http://{encoded_user}:{encoded_password}@{proxy_host}:{proxy_port}"
-        return {"http": proxy_auth_url, "https": proxy_auth_url}
+def _create_proxies_dict() -> Optional[Dict]:
+    """Helper to create a proxy dictionary if credentials are provided in secrets."""
+    try:
+        # Check if proxy section exists and is not empty
+        if 'proxy' in st.secrets and st.secrets.proxy:
+            proxy_config = st.secrets.proxy.to_dict()
+            proxy_user = proxy_config.get("user")
+            proxy_password = proxy_config.get("password")
+            if proxy_user and proxy_password:
+                proxy_host = proxy_config.get("host", "your.proxy.host.com")
+                proxy_port = proxy_config.get("port", "8080")
+                encoded_user = quote(proxy_user)
+                encoded_password = quote(proxy_password)
+                proxy_auth_url = f"http://{encoded_user}:{encoded_password}@{proxy_host}:{proxy_port}"
+                return {"http": proxy_auth_url, "https": proxy_auth_url}
+    except AttributeError:
+        # This can happen if st.secrets.proxy is not a table.
+        return None
     return None
 
-# --- Global Settings ---
-
-def get_global_settings() -> Dict[str, str]:
-    """Loads the global settings (API key, email, proxy)."""
-    return load_global_settings()
-
-def handle_save_global_settings(settings: Dict[str, str]):
-    """Saves the global settings (API key, email, proxy)."""
-    save_global_settings(
-        api_key=settings.get("api_key", "").strip(), 
-        email=settings.get("email", "").strip(),
-        proxy_user=settings.get("proxy_user", "").strip(),
-        proxy_password=settings.get("proxy_password", "").strip() # Passwords may sometimes have spaces, but usually not leading/trailing
-    )
-
-# --- Tealium Configuration ---
-
-def get_all_configurations() -> List[Dict[str, str]]:
-    """Loads all Tealium profile configurations from the database."""
-    return load_all_configurations()
-
-def get_active_configuration_details() -> Optional[Dict[str, str]]:
-    """Loads the details of the active Tealium configuration, including global settings."""
-    return get_active_configuration()
-
-def get_tealium_connection_status() -> bool:
-    """
-    Attempts to initialize TealiumClient with the active config and authenticate.
-    Returns True if authentication is successful, False otherwise.
-    """
-    active_config = get_active_configuration()
-    if not active_config or not all(active_config.get(k) for k in ["account", "profile", "api_key", "email"]):
-        return False
-        
+def _get_adobe_client(config: Dict) -> Optional[AdobeAnalyticsClient]:
+    """Initializes and returns an AdobeAnalyticsClient from a config dictionary."""
+    if not config:
+        return None
     try:
-        proxies = _create_proxies_dict(active_config)
+        # Add proxy settings to the Adobe client config if they exist
+        proxies = _create_proxies_dict()
+        if proxies:
+            config['proxies'] = proxies
+        return AdobeAnalyticsClient(config)
+    except Exception as e:
+        print(f"Error instantiating AdobeAnalyticsClient: {e}")
+        return None
+
+# --- Tealium Actions ---
+
+def get_tealium_connection_status(config: Dict) -> bool:
+    """Attempts to initialize TealiumClient with a given config and authenticate."""
+    if not config or not all(config.get(k) for k in ["account", "profile", "tealium_api_username", "tealium_api_key"]):
+        return False
+    try:
+        proxies = _create_proxies_dict()
         client = TealiumClient(
-            account=active_config.get("account"),
-            profile=active_config.get("profile"),
-            api_key=active_config.get("api_key"),
-            email=active_config.get("email"),
+            account=config.get("account"),
+            profile=config.get("profile"),
+            api_key=config.get("tealium_api_key"),
+            email=config.get("tealium_api_username"),
             proxies=proxies
         )
         client._authenticate_v2()
@@ -86,222 +65,68 @@ def get_tealium_connection_status() -> bool:
         print(f"An error occurred during Tealium connection attempt: {e}")
         return False
 
-def handle_add_new_config(config_data: Dict[str, str]) -> bool:
-    """Saves a new Tealium profile configuration."""
-    # Strip whitespace from inputs
-    name = config_data.get("name", "").strip()
-    account = config_data.get("account", "").strip()
-    profile = config_data.get("profile", "").strip()
-
-    if not all([name, account, profile]):
-        print("Error: All fields for new Tealium configuration must be provided.")
-        return False
-    
-    save_configuration(name, account, profile, is_active=False)
-    
-    all_configs = load_all_configurations()
-    if len(all_configs) == 1:
-        set_active_configuration(name)
-    return True
-
-def handle_update_config(config_data: Dict[str, str]) -> bool:
-    """Updates an existing Tealium profile configuration."""
-    # This function is not fully utilized in the current UI but is kept for future use.
-    # Strip whitespace from inputs
-    name = config_data.get("name", "").strip() # Name is disabled in UI, but good practice
-    account = config_data.get("account", "").strip()
-    profile = config_data.get("profile", "").strip()
-
-    if not all([name, account, profile]):
-        return False
-    
-    existing_configs = load_all_configurations()
-    is_active = next((cfg.get("is_active", False) for cfg in existing_configs if cfg["name"] == name), False)
-    
-    save_configuration(name, account, profile, is_active)
-    return True
-
-def handle_set_active_config(name: str) -> bool:
-    """Sets a Tealium configuration as active and tests its connection."""
-    set_active_configuration(name)
-    return get_tealium_connection_status()
-
-def handle_delete_config(name: str):
-    """Deletes a Tealium configuration from the database."""
-    was_active = False
-    active_config = get_active_configuration_details()
-    if active_config and active_config.get("name") == name:
-        was_active = True
-
-    delete_configuration(name)
-    
-    if was_active:
-        all_configs = load_all_configurations()
-        if all_configs:
-            set_active_configuration(all_configs[0]["name"])
-
-# --- Adobe Analytics Configuration ---
-
-def get_all_adobe_configurations() -> List[Dict[str, str]]:
-    """Loads all Adobe Analytics configurations from the database."""
-    return load_all_adobe_configurations()
-
-def get_active_adobe_configuration_details() -> Optional[Dict[str, str]]:
-    """Loads the details of the active Adobe Analytics configuration."""
-    return get_active_adobe_configuration()
-
-def get_adobe_config_details_by_name(name: str) -> Optional[Dict[str, str]]:
-    """Loads the full details of a specific Adobe configuration by name."""
-    return load_adobe_configuration_by_name(name)
-
-def get_adobe_connection_status() -> bool:
-    """
-    Attempts to initialize AdobeAnalyticsClient and get a token.
-    Returns True if successful, False otherwise.
-    """
-    active_config = get_active_adobe_configuration()
-    if not active_config:
-        return False
-    try:
-        client = AdobeAnalyticsClient(active_config)
-        client._ensure_token()
-        return bool(client.access_token)
-    except Exception as e:
-        print(f"An error occurred during Adobe connection attempt: {e}")
-        return False
-
-def handle_add_new_adobe_config(config_data: Dict[str, str]) -> bool:
-    """Saves a new Adobe Analytics configuration after validating based on auth method."""
-    # Strip leading/trailing whitespace from all string values to prevent issues.
-    stripped_config = {k: v.strip() if isinstance(v, str) else v for k, v in config_data.items()}
-
-    original_name = stripped_config.get("original_name")
-    new_name = stripped_config.get("name")
-    auth_method = stripped_config.get("auth_method")
-    
-    # Basic validation for common fields
-    # Use the stripped data for validation
-    if not all(stripped_config.get(k) for k in ["name", "api_key", "global_company_id"]):
-        print("Error: Name, API Key, and Global Company ID are always required.")
-        return False
-        
-    # Method-specific validation
-    if auth_method == 'oauth':
-        if not stripped_config.get("client_secret"):
-            print("Error: For OAuth auth, the Client Secret is required.")
-            return False
-    elif auth_method == 'jwt':
-        required_keys = ["client_secret", "technical_account_id", "organization_id", "private_key"]
-        if not all(stripped_config.get(k) for k in required_keys):
-            print("Error: For JWT auth, all secret and ID fields are required.")
-            return False
-    elif auth_method == 'manual':
-        if not stripped_config.get("manual_access_token"):
-            print("Error: For Manual Token auth, the Access Token is required.")
-            return False
-    elif auth_method not in ['oauth', 'jwt', 'manual']:
-        print(f"Error: Unknown auth method '{auth_method}'.")
-        return False
-
-    # Handle Rename if applicable
-    if original_name and original_name != new_name:
-        try:
-            rename_adobe_configuration(original_name, new_name)
-            # If the renamed config was active, we might need to ensure the new name is set as active
-            # But since we copy the 'is_active' flag in the DB function, it should be fine.
-        except Exception as e:
-            print(f"Error renaming configuration: {e}")
-            return False
-
-    # Save the cleaned data
-    save_adobe_configuration(stripped_config)
-    
-    all_configs = load_all_adobe_configurations()
-    if len(all_configs) == 1:
-        set_active_adobe_configuration(stripped_config["name"])
-    return True
-
-def handle_set_active_adobe_config(name: str) -> bool:
-    """Sets an Adobe configuration as active and tests its connection."""
-    set_active_adobe_configuration(name)
-    return get_adobe_connection_status()
-
-def handle_delete_adobe_config(name: str):
-    """Deletes an Adobe configuration from the database."""
-    was_active = False
-    active_config = get_active_adobe_configuration_details()
-    if active_config and active_config.get("name") == name:
-        was_active = True
-
-    delete_adobe_configuration(name)
-
-    if was_active:
-        all_configs = load_all_adobe_configurations()
-        if all_configs:
-            set_active_adobe_configuration(all_configs[0]["name"])
-
-# --- Bulk Operations ---
-
-def handle_crawl_all_profiles() -> dict:
-    """
-    Iterates through all saved Tealium configurations and triggers a download for each.
-    Returns a status dictionary.
-    """
-    configs = get_all_configurations()
-    if not configs:
-        return {"success": True, "count": 0} # No work to do
-
-    success_count = 0
-    for config in configs:
-        config_name = config.get("name")
-        if handle_download_profile(config_name):
-            success_count += 1
-    
-    return {
-        "success": success_count == len(configs),
-        "count": len(configs)
-    }
-
-# --- Other Controller Functions ---
-
-def handle_download_profile(config_name: str) -> bool:
-    """Fetches the latest profile data and caches it."""
-    settings = get_global_settings()
-    configs = load_all_configurations()
-    target_config = next((cfg for cfg in configs if cfg["name"] == config_name), None)
-
-    if not target_config or not settings.get("api_key"):
-        print(f"Error: Cannot download profile for '{config_name}'. Missing config or global credentials.")
+def handle_download_profile(profile_name: str, config: Dict) -> bool:
+    """Fetches the latest profile data and caches it, using the profile name as the key."""
+    if not config or not all(config.get(k) for k in ["account", "profile", "tealium_api_username", "tealium_api_key"]):
+        print(f"Error: Cannot download profile for '{profile_name}'. Missing config data.")
         return False
         
     try:
-        proxies = _create_proxies_dict(settings)
+        proxies = _create_proxies_dict()
         client = TealiumClient(
-            account=target_config["account"],
-            profile=target_config["profile"],
-            api_key=settings["api_key"],
-            email=settings["email"],
+            account=config["account"],
+            profile=config["profile"],
+            api_key=config["tealium_api_key"],
+            email=config["tealium_api_username"],
             proxies=proxies
         )
         component_types_to_fetch = ["tags", "extensions", "loadRules", "variables"]
         profile_data_response = client.get_profile_components(component_types=component_types_to_fetch)
         
         if profile_data_response.get("error"):
-            print(f"Error downloading profile for '{config_name}': {profile_data_response.get('message')}")
+            print(f"Error downloading profile '{profile_name}': {profile_data_response.get('message')}")
             return False
 
         profile_data = profile_data_response.get("data")
         if profile_data:
-            cache_profile_data(config_name, profile_data)
-            print(f"Successfully downloaded and cached profile for '{config_name}'.")
+            cache_profile_data(profile_name, profile_data) # Use the secrets-defined name as the unique key
+            print(f"Successfully downloaded and cached profile for '{profile_name}'.")
             return True
         else:
-            print(f"Error: Download for '{config_name}' resulted in empty data.")
+            print(f"Error: Download for '{profile_name}' resulted in empty data.")
             return False
             
     except Exception as e:
-        print(f"An unexpected error occurred during profile download for '{config_name}': {e}")
+        print(f"An unexpected error during profile download for '{profile_name}': {e}")
         return False
+
+# --- Adobe Actions ---
+
+def get_adobe_connection_status(config: Dict) -> bool:
+    """Initializes AdobeAnalyticsClient with a given config and gets a token."""
+    client = _get_adobe_client(config)
+    if not client:
+        return False
+    try:
+        client._ensure_token()
+        return bool(client.access_token)
+    except Exception as e:
+        print(f"An error occurred during Adobe connection attempt: {e}")
+        return False
+
+def test_adobe_discovery(config: Dict) -> Dict:
+    """Calls the Adobe discovery/me endpoint for a given config."""
+    client = _get_adobe_client(config)
+    if not client:
+        return {"error": "Impossible d'initialiser le client Adobe avec la configuration fournie."}
+    try:
+        discovery_info = client.discover_me()
+        return discovery_info
+    except Exception as e:
+        print(f"Error during Adobe discovery test: {e}")
+        return {"error": str(e)}
+
+# --- DB Status and Maintenance ---
 
 def get_database_status() -> Dict:
     """Retrieves the status of the database."""
@@ -311,18 +136,3 @@ def handle_database_reset() -> bool:
     """Handles the request to reset the database."""
     return reset_database()
 
-def test_adobe_discovery() -> Dict:
-    """
-    Calls the Adobe discovery/me endpoint to fetch user/service details.
-    """
-    active_config = get_active_adobe_configuration()
-    if not active_config:
-        return {"error": "No active Adobe configuration found."}
-
-    try:
-        client = AdobeAnalyticsClient(active_config)
-        discovery_info = client.discover_me()
-        return discovery_info
-    except Exception as e:
-        print(f"Error during Adobe discovery test: {e}")
-        return {"error": str(e)}

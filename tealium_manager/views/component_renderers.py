@@ -2,6 +2,70 @@ import streamlit as st
 import pandas as pd
 from typing import Dict, Any, List
 
+def render_sidebar():
+    """Renders the custom sidebar navigation for the application."""
+    st.sidebar.title("Navigation")
+    st.sidebar.divider()
+    st.sidebar.subheader("Tealium")
+    st.sidebar.page_link("main.py", label="Accueil")
+    st.sidebar.page_link("pages/inventory_view.py", label="Inventaire")
+    st.sidebar.page_link("pages/mep_history_view.py", label="Historique des MEP")
+
+    st.sidebar.divider()
+    st.sidebar.subheader("Adobe Analytics")
+    st.sidebar.page_link("pages/adobe_dashboard_view.py", label="Requeteur")
+    st.sidebar.page_link("pages/adobe_reports_view.py", label="Rapports")
+
+    st.sidebar.divider()
+    st.sidebar.subheader("Configuration")
+    st.sidebar.page_link("pages/1_Config_Tealium.py", label="Config Tealium")
+    st.sidebar.page_link("pages/2_Config_Adobe.py", label="Config Adobe")
+    st.sidebar.page_link("pages/9_Administration.py", label="Administration")
+
+    # Session state initialization for multi-page navigation is now handled by Streamlit,
+    # but we might need to keep state for active configs.
+    if "active_tealium_config" not in st.session_state:
+        st.session_state.active_tealium_config = None
+    if "active_adobe_config" not in st.session_state:
+        st.session_state.active_adobe_config = None
+    if 'active_tealium_profile_name' not in st.session_state:
+        st.session_state.active_tealium_profile_name = None
+    if 'active_adobe_profile_name' not in st.session_state:
+        st.session_state.active_adobe_profile_name = None
+
+    st.sidebar.divider()
+    st.sidebar.caption("🚀 Tealium Manager v0.8 (Refactored)")
+
+
+def setup_page():
+    """
+    Sets the default page configuration, injects CSS, and renders the sidebar.
+    This function should be called at the start of every page script.
+    """
+    # st.set_page_config must be called as the first Streamlit command and only once.
+    try:
+        st.set_page_config(
+            page_title="Tealium Manager",
+            layout="wide"
+        )
+    except st.errors.StreamlitAPIException as e:
+        if "can only be called once per app" in str(e):
+            pass
+        else:
+            raise
+
+    # --- Hide Streamlit's default navigation ---
+    st.markdown("""
+        <style>
+            [data-testid="stSidebarNav"] {
+                display: none;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    # Render the custom sidebar
+    render_sidebar()
+
 # --- Load Rule Renderers ---
 
 def _render_conditions_table(conditions: List[List[Dict[str, Any]]]):

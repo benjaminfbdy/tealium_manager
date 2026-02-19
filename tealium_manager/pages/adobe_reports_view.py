@@ -1,10 +1,11 @@
 import streamlit as st
+from views.component_renderers import setup_page
 import pandas as pd
 import json
 from datetime import date, timedelta, time, datetime
 import concurrent.futures
 import math
-from controllers.config_controller import get_all_adobe_configurations
+
 from controllers.adobe_controller import (
     get_report_suites, 
     get_or_refresh_components, 
@@ -12,11 +13,7 @@ from controllers.adobe_controller import (
     handle_update_report,
     get_all_saved_reports, 
     handle_delete_report,
-    run_saved_report,
-    get_report_history,
-    load_historical_report_dataframe,
-    delete_report_history_item,
-    format_date_range_readable
+    run_saved_report
 )
 import threading
 try:
@@ -24,9 +21,11 @@ try:
 except ImportError:
     # Fallback pour les anciennes versions de Streamlit
     from streamlit.scriptrunner import add_script_run_ctx, get_script_run_ctx
-from utils.adobe_repo import save_report_result
+from utils.adobe_repo import save_report_result, get_all_cached_report_results, get_cached_result_by_id, delete_cached_result
+from utils.data_processing import format_date_range_readable
 
 def render_adobe_reports_view():
+    setup_page()
     st.title("📑 Rapports")
     
     # --- Navigation State Management ---
@@ -528,15 +527,19 @@ def render_adobe_reports_view():
                 st.rerun()
         
         # 1. Select Config
-        configs = get_all_adobe_configurations()
-        config_opts = {c['name']: c for c in configs}
+        adobe_configs = st.secrets.get("adobe_configs", {})
+        if not adobe_configs:
+            st.warning("Aucune configuration Adobe trouvée dans les secrets. Veuillez mettre à jour `.streamlit/secrets.toml`.")
+            st.stop()
+        
+        config_opts = list(adobe_configs.keys())
         
         # Determine default index for config
         config_index = 0
-        if is_editing and edit_data['adobe_config_name'] in list(config_opts.keys()):
-            config_index = list(config_opts.keys()).index(edit_data['adobe_config_name'])
+        if is_editing and edit_data['adobe_config_name'] in config_opts:
+            config_index = config_opts.index(edit_data['adobe_config_name'])
 
-        selected_config_name = st.selectbox("Compte Adobe", options=list(config_opts.keys()), index=config_index)
+        selected_config_name = st.selectbox("Compte Adobe", options=config_opts, index=config_index)
         
         if selected_config_name:
             # 2. Select RSID (Need to fetch suites for this config)
@@ -843,7 +846,7 @@ def render_adobe_reports_view():
         st.subheader("Historique des Exécutions")
         st.caption("Retrouvez ici les résultats des rapports précédemment exécutés (stockés localement).")
 
-        history_items = get_report_history()
+        history_items = get_all_cached_report_results()
 
         if not history_items:
             st.info("Aucun historique disponible.")
@@ -891,7 +894,7 @@ def render_adobe_reports_view():
                         st.rerun()
                     
                     if action_cols[1].button("🗑️", key=f"del_hist_{item['id']}", help="Supprimer de l'historique"):
-                        delete_report_history_item(item['id'])
+                        delete_cached_result(item['id'])
                         if st.session_state.history_view_id == item['id']:
                             st.session_state.history_view_id = None
                         st.rerun()
@@ -908,7 +911,10 @@ def render_adobe_reports_view():
                     st.caption(f"Période : {format_date_range_readable(selected_meta['date_range_key'])}")
                     
                     with st.spinner("Chargement des données archivées..."):
-                        df_hist = load_historical_report_dataframe(st.session_state.history_view_id)
+                        cached_result = get_cached_result_by_id(st.session_state.history_view_id)
+                        df_hist = None
+                        if cached_result and cached_result.get('result_data'):
+                            df_hist = pd.read_json(cached_result['result_data'], orient='split')
                     
                     if df_hist is not None and not df_hist.empty:
                         # Reuse display logic (simplified)
@@ -953,3 +959,5 @@ def render_adobe_reports_view():
                             )
                     else:
                         st.warning("Impossible de charger les données ou données vides.")
+if __name__ == "__main__":
+    render_adobe_reports_view()

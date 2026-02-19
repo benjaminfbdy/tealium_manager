@@ -33,7 +33,7 @@ class AdobeAnalyticsClient:
         self.auth_method = config.get("auth_method", "oauth")
 
         # Credentials
-        self.api_key = config.get("api_key") # Also Client ID
+        self.api_key = config.get("client_id") or config.get("api_key") # Also Client ID
         self.client_secret = config.get("client_secret")
         self.tech_account_id = config.get("technical_account_id")
         self.org_id = config.get("organization_id")
