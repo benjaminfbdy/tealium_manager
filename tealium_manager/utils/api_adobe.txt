@@ -1,0 +1,1734 @@
+Reporting API
+The Analytics 2.0 reporting API endpoints allow you to access reports programmatically through Adobe Developer. The endpoints use the same data and methods that are used when working with reports in the UI. By using this API, you can programmatically report to executive dashboards, custom reporting platforms, tight Experience Cloud integrations, or other options.
+
+Adobe may add optional request and response members (name/value pairs) to existing API objects at any time and without notice or changes in versioning. Adobe recommends that you refer to the API documentation of any third-party tool you integrate with our APIs so that such additions are ignored in processing if not understood. If implemented properly, such additions are non-breaking changes for your implementation. Adobe will not remove parameters or add required parameters without first providing standard notification through release notes.
+
+The report endpoints described in this guide are routed through analytics.adobe.io. To use them, you will need to first create a client with access to the Adobe Analytics Reporting API. For more information, refer to Getting started with the Analytics API.
+
+This guide includes instructions for using the following endpoints:
+
+POST reports: Creates report requests and returns data for an existing report suite. This corresponds to creating a visualization in the UI.
+GET top items: Returns only the specified number of items in the report, ranked by highest data values
+This guide does not include descriptions for all request and response parameters for the reports endpoint. For more information on parameters included with this endpoint, see the API reference. Also, you can copy API JSON request payloads and responses associated with any visualization directly from Analysis Workspace with the Oberon debugger tool. This can be a helpful aid in structuring any API reporting request from Analysis Workspace visualizations.
+
+Request reporting data
+This guide includes API instructions that correspond to an example free-form table visualization in Analysis Workspace with the page dimension and the following metrics:
+
+pageviews
+visits
+visitors
+This example appears in Analysis Workspaces similar to the following graphic:
+
+visualization
+
+To make the request, use the following URI for your POST HTTP call:
+
+POST https://analytics.adobe.io/api/{global-company-id}/reports
+
+Click the Request tab in the following example to see a POST request corresponding to the data shown in the visualization above, limited to the top ten values. Click the Response tab to see a successful JSON response for the request.
+
+Example request
+Example response
+curl -X 'POST' \
+  'https://analytics.adobe.io/api/{global-company-id}/reports' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -H 'x-api-key: {API-key}' \
+  -H 'Authorization: {Bearer-token}
+  -d '{REQUESTJSON}
+{
+    "rsid": "examplersid",
+    "globalFilters": [
+        {
+            "type": "dateRange",
+            "dateRange": "2023-07-01T00:00:00.000/2023-08-01T00:00:00.000",
+            "dateRangeId": "thisMonth"
+        }
+    ],
+    "metricContainer": {
+        "metrics": [
+            {
+                "columnId": "0",
+                "id": "metrics/pageviews"
+            },
+            {
+                "columnId": "1",
+                "id": "metrics/visits",
+                "sort": "desc"
+            },
+            {
+                "columnId": "2",
+                "id": "metrics/visitors"
+            }
+        ]
+    },
+    "dimension": "variables/page",
+    "settings": {
+        "countRepeatInstances": true,
+        "includeAnnotations": true,
+        "limit": 10,
+        "page": 0,
+        "nonesBehavior": "exclude-nones"
+    },
+    "statistics": {
+        "functions": [
+            "col-max",
+            "col-min"
+        ]
+    },
+    "capacityMetadata": {
+        "associations": [
+            {
+                "name": "applicationName",
+                "value": "Analysis Workspace UI"
+            },
+            {
+                "name": "projectId",
+                "value": "undefined"
+            },
+            {
+                "name": "projectName",
+                "value": "New project"
+            },
+            {
+                "name": "panelName",
+                "value": "Freeform table"
+            }
+        ]
+    }
+}
+
+curl -X 'POST' \
+  'https://analytics.adobe.io/api/{global-company-id}/reports' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -H 'x-api-key: {API-key}' \
+  -H 'Authorization: {Bearer-token}
+  -d '{REQUESTJSON}
+{
+    "rsid": "examplersid",
+    "globalFilters": [
+        {
+            "type": "dateRange",
+            "dateRange": "2023-07-01T00:00:00.000/2023-08-01T00:00:00.000",
+            "dateRangeId": "thisMonth"
+        }
+    ],
+    "metricContainer": {
+        "metrics": [
+            {
+                "columnId": "0",
+                "id": "metrics/pageviews"
+            },
+            {
+                "columnId": "1",
+                "id": "metrics/visits",
+                "sort": "desc"
+            },
+            {
+                "columnId": "2",
+                "id": "metrics/visitors"
+            }
+        ]
+    },
+    "dimension": "variables/page",
+    "settings": {
+        "countRepeatInstances": true,
+        "includeAnnotations": true,
+        "limit": 10,
+        "page": 0,
+        "nonesBehavior": "exclude-nones"
+    },
+    "statistics": {
+        "functions": [
+            "col-max",
+            "col-min"
+        ]
+    },
+    "capacityMetadata": {
+        "associations": [
+            {
+                "name": "applicationName",
+                "value": "Analysis Workspace UI"
+            },
+            {
+                "name": "projectId",
+                "value": "undefined"
+            },
+            {
+                "name": "projectName",
+                "value": "New project"
+            },
+            {
+                "name": "panelName",
+                "value": "Freeform table"
+            }
+        ]
+    }
+}
+Example request details
+In addition to the metrics described above, the JSON payload requests the following:
+
+Time period From July 1, 2023 00:00:00.000 - August 1, 2023 00:00:00.000, using the report suite timezone
+
+To sort response visits by descending value, i.e. highest to lowest
+
+Request parameters
+The example request includes the following parameters in the payload:
+
+Parameter	Req/Opt	Type	Description
+rsid
+required
+string
+report suite ID
+globalFilters
+optional
+array
+Contains type, dateRange, and dateRangeId
+type
+optional
+string
+The type of filter applied
+dateRange
+optional
+string
+The date range of the data
+dateRangeId
+optional
+string
+The label for the date range; e.g., ThisMonth
+metricContainer
+optional
+object
+Contains metrics array
+metrics
+optional
+array
+Contains ColumnId, id, and sort
+columnId
+optional
+string
+The column number in the table visualization, left to right, starting from 0
+id
+optional
+string
+The name of the element for the column; e.g., the name of the metric
+sort
+optional
+string
+The sorting applied to the column data--asc or desc
+dimension
+required
+string
+The dimension used for the report
+settings
+optional
+object
+The settings requested for the reporting response, as specified by the parameters in the following five rows
+countRepeatInstances
+optional
+boolean
+Whether to count repeat instances of a returned metric
+includeAnnotations
+optional
+boolean
+Whether to include annotations in the response
+limit
+optional
+integer
+The maximum number of items to return in the response
+page
+optional
+integer
+The maximum number of pages to return in the response
+nonesBehavior
+optional
+string
+Excludes instances with values of 0 if set to exclude-nones
+statistics
+optional
+object
+Contains the functions array
+functions
+optional
+array
+Contains col-max and col-min
+col-max
+optional
+string
+The column maximum
+col-min
+optional
+string
+The column minimum
+capacityMetadata
+optional
+object
+Contains associations array
+associations
+optional
+array
+Contains name and value parameters for each type of metadata associated with report; e.g., applicationName, projectId, projectName, and panelName
+name
+optional
+string
+The associated category type of the associated metadata
+value
+optional
+string
+The actual name or title specified for the metadata category in the report
+Example response details
+The response above shows the following top ten ranked pages for this month according to the pageViews, visits, and visitors metrics:
+
+home
+category 5
+category 2
+category 4
+category 3
+articles
+app: launch
+category 1
+forum
+leaf form: step 1
+Additionally, the response above shows the following:
+
+Each row section contains each report record.
+
+The value property contains the dimension value.
+
+The data property contains a list of metric counts for each metric requested.
+
+The summaryData section contains a total of the metrics in the current report.
+
+If you do not include a limit with your POST request, you can subsequently use the GET top items endpoint--described in a following section--to have only the top specified number of items returned.
+
+Response parameters
+The example response includes the following parameters:
+
+Parameter	Type	Description
+totalPages
+integer
+The total number of pages with data
+firstPage
+boolean
+Whether to include the first page of results
+lastPage
+boolean
+Whether to include the last page of results
+numberOfElements
+integer
+The number of item elements in the report
+number
+integer
+The number of pages, starting with 0
+totalElements
+integer
+Total number of elements in the report
+columns
+object
+Contains column and dimension data
+dimension
+object
+Contains id and type
+id
+string
+Name of the dimension
+type
+string
+The dimension ID data type
+columnIds
+string
+The column number in the table visualization, left to right, starting from 0
+rows
+container
+Contains itemId, value and data
+itemId
+string
+The item ID
+value
+string
+The name specified for the itemId in the report
+data
+number($double)
+The numerical values returned for the requested items
+summaryData
+object
+Contains the ranked summary data information described in the following rows
+filteredTotals
+number($double)
+The data totals after the specified filters are applied
+annotations
+string
+Annotations for the summary data, if specified
+totals
+number($double)
+The data totals
+annotationExceptions
+string
+Exceptions for annotations
+col-max
+optional
+The column maximum
+col-min
+optional
+The column minimum
+Retrieve top items
+Use the GET Top Items request to return only the top items from the previous POST body, according the maximum number of items you want returned (excluding NonValues). They are returned in ranked order. You can specify the maximum with limit included as a query parameter in the request.
+
+To make the request, use the following URI for your GET HTTP call:
+
+GET https://analytics.adobe.io/api/{global-company-id}/reports/topItems
+
+Example request
+The following example shows a request for a top items report for the POST body shown above:
+
+curl -X 'GET' \
+  'https://analytics.adobe.io/api/{global-company-id}/reports/topItems?rsid=examplersid=variables%2Fpage&locale=en_US&lookupNoneValues=false&limit=10&page=0' \
+  -H 'accept: application/json' \
+  -H 'x-api-key: 5a8dcc2cfa71472cbfa4fb53671c45ed' \
+  -H 'Authorization: {Bearer-token} 
+
+curl -X 'GET' \
+  'https://analytics.adobe.io/api/{global-company-id}/reports/topItems?rsid=examplersid=variables%2Fpage&locale=en_US&lookupNoneValues=false&limit=10&page=0' \
+  -H 'accept: application/json' \
+  -H 'x-api-key: 5a8dcc2cfa71472cbfa4fb53671c45ed' \
+  -H 'Authorization: {Bearer-token} 
+In this example, you append the previous request body to the cURL call. Note that this request specifies that NoneValues not be included and that the limit of items to return be 10.
+
+The response for this request is the same as the example response shown above.
+
+Partial Responses (206 Status Code)
+A 206 status code indicates a partial response. This status code means that there were some columns in the reporting response that have errors. These errors can include any of the following:
+
+Unauthorized Metric: User does not have access to the requested metric
+Metric Not Enabled: The requested metric is not enabled in this report suite
+Unauthorized Dimension: User does not have access to the requested dimension
+Dimension Not Enabled: The requested dimension is not enabled in this report suite
+Unauthorized Global Dimension: User does not have access to the global dimension for this request
+Global Dimension Not Enabled: The global dimension for this request is not enabled in this report suite
+Unexpected Number of Items: Anomaly Detection algorithm returned an unexpected number of anomalies
+General Service Error: General Anomaly Detection service error
+Additional information
+For more information on the Reporting API, see the following resources:
+
+Breakdown dimensions
+Example reporting API calls
+Search filters
+Use segments in the reporting API
+Oberon XML and JSON debugger
+
+Analytics 2.0 API real-time reports
+The Analytics 2.0 real-time report API endpoint allows you to access real-time data programmatically through Adobe Developer. The real-time data reported is less than two minutes latent and auto-updates on a minute-by-minute basis. See the Real-time reporting overview for more information.
+
+The endpoint described in this guide is routed through analytics.adobe.io. To use it, you will need to first create a client with access to the Adobe Analytics Reporting API. For more information, refer to Getting started with the Analytics API.
+
+Adobe may add optional request and response members (name/value pairs) to existing API objects at any time and without notice or changes in versioning. Adobe recommends that you refer to the API documentation of any third-party tool you integrate with our APIs so that such additions are ignored in processing if not understood. If implemented properly, such additions are non-breaking changes for your implementation. Adobe will not remove parameters or add required parameters without first providing standard notification through release notes.
+
+This guide includes the following sections:
+
+Real-time report API endpoint
+Real-time reports with relative date ranges
+Real-time reports with an additional dimension
+Real-time breakdown reports
+Limiting the number of dimension return values per period
+Status codes
+Trouble-shooting
+More information
+Real-time report API endpoint
+Use the following endpoint to generate a real-time report for the data requested in a POST body.
+
+POST https://analytics.adobe.io/api/{GLOBAL_COMPANY_ID}/reports/realtime
+
+You can find your global company ID by using the Discovery API.
+
+Request and response examples
+Click the Request tab in the following example to see a cURL request for this endpoint. Click the Response tab to see a successful JSON response for the request.
+
+Request
+Response
+curl -X POST "https://analytics.adobe.io/api/{GLOBAL_COMPANY-ID}/reports/realtime" \
+  -H "accept: application/json" \
+  -H "x-api-key: {CLIENT_ID}" \
+  -H "Authorization: Bearer {ACCESS_TOKEN}"\
+  -d '{
+  "rsid": "examplersid",
+  "globalFilters": [
+    {
+      "type": "dateRange",
+      "dateRange": "YYYY-MM-24T09:00:00/YYYY-MM-24T09:30:00"
+    }
+  ],
+  "metricContainer": {
+    "metrics": [
+      {
+        "columnId": "0",
+    "id": "metrics/occurrences"
+      }
+    ]
+  },
+  "dimensions": [
+    {
+      "id": "variables/daterangeminute",
+      "dimensionColumnId": "0"
+    }
+  ],
+  "settings": {
+    "realTimeMinuteGranularity": 10,
+    "limit": 20
+  }
+}'
+
+curl -X POST "https://analytics.adobe.io/api/{GLOBAL_COMPANY-ID}/reports/realtime" \
+  -H "accept: application/json" \
+  -H "x-api-key: {CLIENT_ID}" \
+  -H "Authorization: Bearer {ACCESS_TOKEN}"\
+  -d '{
+  "rsid": "examplersid",
+  "globalFilters": [
+    {
+      "type": "dateRange",
+      "dateRange": "YYYY-MM-24T09:00:00/YYYY-MM-24T09:30:00"
+    }
+  ],
+  "metricContainer": {
+    "metrics": [
+      {
+        "columnId": "0",
+    "id": "metrics/occurrences"
+      }
+    ]
+  },
+  "dimensions": [
+    {
+      "id": "variables/daterangeminute",
+      "dimensionColumnId": "0"
+    }
+  ],
+  "settings": {
+    "realTimeMinuteGranularity": 10,
+    "limit": 20
+  }
+}'
+Request example details
+The above example creates a real-time report request for the following:
+
+To show data for the dimension daterangeminute and the metric occurrences for the rsid examplersid.
+To show data over a 30-minute time period on from YYYY-MM-24T09:00:00 to YYYY-MM-24T09:30:00, or on the same day--the 24th between the time from 09:00 to 09:30. Note: the start date cannot be earlier than 20 hours from the time the request is made, according to the time zone specified for the report suite.
+To show data at a granularity of 10 minutes, as specified in the value of realTimeMinuteGranularity. The default granularity is one minute.
+Request parameters
+The POST real-time reports endpoint includes the following request parameters:
+
+Parameter	Req/Opt	Type	Description
+rsid
+required
+string
+report suite ID
+locale
+optional
+string
+The specified language
+globalFilters
+optional
+container
+Contains the type and dateRange parameters
+type
+optional
+dateRange
+The type of filter to be applied
+dateRange
+optional
+string
+The start and end dates for the report. The format is YYYY-DD-DDT00:00:00/YYYY-MM-DDT00:00:00and is based on the timezone of the rsid.
+metricContainer
+required
+container
+Contains the metrics container. One metric is required for each real-time report.
+columnId
+required
+string
+The column ID. One metric column ID is required for each real-time report.
+id
+required
+string
+The metric or dimension ID. One metric ID is required for each real-time report.
+dimensions
+required
+container
+Contains the id and dimensionColumnId of the dimensions to be included in the report. For real-time reports, the variables/daterangeminute is required.
+dimensionColumnId
+required
+string
+The dimension column ID
+settings
+optional
+container
+Contains the settings object members for the specified real-time report, including realTimeMinuteGranularity
+realtimeMinuteGranularity
+optional
+The number of minutes between the reporting of the specified data
+limit
+optional
+$int32
+The maximum number of items to show per page
+Response example details
+The above JSON response example shows the following details:
+
+The number of occurrences from 9:00 to 9:10 on the 24th is 2183.
+The number of occurrences from 9:10 to 9:20 on the 24th is 2256.
+The number of occurrences from 9:20 to just before 9:30 on the 24th is 2034.
+The total number of occurrences from 9:00 to 9:30 on the 24th is 6473.
+Response parameters
+The POST real-time reports endpoint includes the following response parameters:
+
+Parameter	Type	Description
+totalPages
+$int32
+The total pages for the report
+firstPage
+boolean
+Whether the response includes the first page of report
+lastPage
+boolean
+Whether the response includes the last page of report
+numberOfElements
+$int32
+The total number of elements included in the report
+rows
+container
+Contains the row parameters itemIds, values, data, value, and itemId.
+itemIds
+string
+Processing numbers used to associate time values
+values
+string
+The values--or in this case the tim--associated with the data
+data
+$double
+The data--or in this case the occurrences--associated with the specified item and value
+value
+string
+The values--or in this case the tim--associated with the data
+itemId
+string
+Processing number used to associate time values
+summaryData
+container
+Contains objects providing summary for report
+totals
+$int32
+The total for all data results in the report
+Real-time reports with relative dates
+The POST real-time reports endpoint also supports requests with relative date ranges. Many users find these values easier to specify for real-time querying. Relative date ranges differ from absolute date range values in how they are specified. Relative dates use the format from /to to specify the ranges. The following examples show the difference:
+
+Absolute date range example:
+
+"dateRange":"YYYY-10-01T00:00:00.000/YYYY-10-01T00:20:00.000", //Note: 20 minute range
+
+Relative date range example:
+
+"dateRangeRelative":"30 minutes ago/10 minutes ago" //Note: 20 minute range
+
+Relative date range in JSON:
+
+{
+   "rsid":"examplersid.suiteall",
+   "globalFilters":[
+      {
+         "type":"dateRange",
+         "dateRangeRelative":"30 minutes ago/10 minutes ago" 
+      }
+   ],
+}
+
+{
+   "rsid":"examplersid.suiteall",
+   "globalFilters":[
+      {
+         "type":"dateRange",
+         "dateRangeRelative":"30 minutes ago/10 minutes ago" 
+      }
+   ],
+}
+Possible values for from and to:
+minutes, for example: 20 minutes ago
+hours, for example: 1 hour ago
+now
+midnight
+noon
+hour time with AM/PM, for example: 3:45 PM or 3 PM
+yesterday hour time with AM/PM, for example: yesterday 12:30 PM or yesterday 12 PM
+Real-time reports with an additional dimension
+The following POST request example includes an additional dimension (clickmaplinkbyregion), along with the daterangeminute dimension shown in the first example above. The result is additional data values for the added dimension and combined dimension occurrences.
+
+Request and response examples
+Click the Request tab in the following example to see a cURL request for this endpoint. Click the Response tab to see a successful JSON response for the request.
+
+Request
+Response
+curl -X POST "https://analytics.adobe.io/api/{GLOBAL_COMPANY-ID}/reports/realtime" \
+  -H "accept: application/json" \
+  -H "x-api-key: {CLIENT_ID}" \
+  -H "Authorization: Bearer {ACCESS_TOKEN}"\
+  -d '{
+  "rsid": "examplersid",
+  "globalFilters": [
+    {
+      "type": "dateRange",
+      "dateRange": "YYYY-MM-25T09:00:00/YYYY-MM-25T09:30:00"
+    }
+  ],
+  "metricContainer": {
+    "metrics": [
+      {
+        "columnId": "0",
+    "id": "metrics/occurrences"
+      }
+    ]
+  },
+  "dimensions": [
+    {
+      "id": "variables/daterangeminute",
+      "dimensionColumnId": "0"
+    },
+        {
+      "id": "variables/clickmaplinkbyregion",
+      "dimensionColumnId": "1"
+    }
+  ],
+  "settings": {
+    "realTimeMinuteGranularity": 10,
+    "limit": 20
+  }
+}
+
+curl -X POST "https://analytics.adobe.io/api/{GLOBAL_COMPANY-ID}/reports/realtime" \
+  -H "accept: application/json" \
+  -H "x-api-key: {CLIENT_ID}" \
+  -H "Authorization: Bearer {ACCESS_TOKEN}"\
+  -d '{
+  "rsid": "examplersid",
+  "globalFilters": [
+    {
+      "type": "dateRange",
+      "dateRange": "YYYY-MM-25T09:00:00/YYYY-MM-25T09:30:00"
+    }
+  ],
+  "metricContainer": {
+    "metrics": [
+      {
+        "columnId": "0",
+    "id": "metrics/occurrences"
+      }
+    ]
+  },
+  "dimensions": [
+    {
+      "id": "variables/daterangeminute",
+      "dimensionColumnId": "0"
+    },
+        {
+      "id": "variables/clickmaplinkbyregion",
+      "dimensionColumnId": "1"
+    }
+  ],
+  "settings": {
+    "realTimeMinuteGranularity": 10,
+    "limit": 20
+  }
+}
+Request example details
+The above example creates a real-time report request for the following:
+
+To show data for the dimensions daterangeminute and clickmaplinkbyregion according to the metric occurencesfor the rsid examplersid.
+To show data over a 30-minute time period on from YYYY-MM-25T09:00:00 to YYYY-MM-25T09:30:00, or on the same day--the 25th between the time from 09:00 to 09:30. Note: the start date cannot be earlier than 20 hours from the time the request is made, according to the time zone specified for the report suite.
+To show data at a granularity of 10 minutes, as specified in the value of realTimeMinuteGranularity.
+The request parameters shown in this example are described in the table above.
+
+Response example details
+The above JSON response example shows the following details:
+
+The number of clickmap occurrences for the Save|BODY region from 9:00 to 9:10 on the 25th is 53.
+The number of clickmap occurrences for the Discard|BODY region from 9:00 to 9:10 on the 25th is 44.
+The number of clickmap occurrences for the Save|BODY region from 9:10 to 9:20 on the 25th is 60.
+The number of clickmap occurrences for the Discard|BODY region from 9:10 to 9:20 on the 25th is 45.
+The number of clickmap occurrences for the Save|BODY region from 9:20 to 9:30 on the 25th is 214.
+The number of clickmap occurrences for the Discard|BODY region from 9:20 to 9:30 on the 25th is 33.
+The total number of clickmap occurrences from 9:00 to 9:30 on the 25th is 449.
+Real-time breakdown reports
+Breakdown reports are useful when you want to see the cross-product of values from two different dimensions. When creating a real-time breakdown report, use the same endpoint as shown above. A real-time breakdown report includes the variable/daterangeminute dimension, a metric, an additional dimension, and a breakdown itemId. Within the payload of the request, use the metricsFilters parameter to specify the filter to be applied, as shown below:
+
+"metricFilters":[
+         {
+            "id":"0",
+            "type":"breakdown",
+            "dimension":"variables/prop1",
+            "itemId":"2939795554"
+         }
+      ]
+
+"metricFilters":[
+         {
+            "id":"0",
+            "type":"breakdown",
+            "dimension":"variables/prop1",
+            "itemId":"2939795554"
+         }
+      ]
+In this case, the variables/prop1 dimension and its itemId are applied as a filter to produce the breakdown. To see an example of a breakdown request that specifies a different object within metricFilters, as well as general information on breakdown reports, see Breakdown dimensions.
+
+Real-time breakdown limitations
+At a high level, real-time reports only support a single level of breakdown (i.e. one dimension broken down by another dimension). Realtime "report configuration" rows are set with one metric and 1-3 dimensions. Real-time breakdown reports (i.e. relating multiple dimensions in a single report) can only be run on dimensions that are configured as part of the same "report configuration" row in the data. Therefore, dimensions that exist in different "report configuration" rows cannot be executed together in a real-time report.
+
+Only the first dimension in a report row is related or correlated to the other row dimensions. The second and third dimensions are not correlated to each other. As a result, any configuration that includes three dimensions can only show two possible breakdowns, as follows:
+
+Valid: Dimension1 by Dimension2
+Valid: Dimension1 by Dimension3
+Not valid: Dimension2 by Dimension3
+Note: Correlations work in both directions automatically. A single report on two dimensions together allows reporting breakdowns in either direction.
+
+Limiting the number of dimension return values per period
+In some instances, the number of dimension values returned per specified time period may be too high or excessive. To manage this, use the realTimeValuePerPeriod parameter in the settings object to specify the number of values you want returned. When using this parameter, you should specify a number of 10 (minimum) or higher or the setting will produce an error. The default is 10 values. For example, to have a certain dimension return only 12 values per time period (such as 30 minutes), the settings object would appear as follows:
+
+"settings": {
+    "realTimeMinuteGranularity": 30,
+    "realTimeValuesPerPeriod": 12
+  }
+
+"settings": {
+    "realTimeMinuteGranularity": 30,
+    "realTimeValuesPerPeriod": 12
+  }
+Note: Any specified limit or page parameter settings will over-ride the realTimeValuesPerPeriod setting.
+
+Status codes
+Each API request returns an HTTP status code that reflects the result, as follows:
+
+HTTP code	Meaning	Description
+200
+Success
+The request is successful.
+400
+Bad Request
+The request was improperly constructed, missing key information, and/or contained incorrect syntax. This error code could indicate a problem such as a missing required parameter or the supplied data did not pass validation.
+401
+Authentication failed
+The request did not pass an authentication check. Your access token may be missing or invalid. Similarly, you may have attempted to access an object that requires administrator permissions. See the OAuth token errors section below for more details.
+403
+Forbidden
+The resource was found, but you do not have the right credentials to view it. You might not have the required permissions to access or edit the resource for reasons not applicable to status code 401.
+404
+Not found
+The requested resource could not be found on the server. The resource may have been deleted, or the requested path was entered incorrectly.
+500
+Internal server errors
+This is a server-side error. If you are making many simultaneous calls, you may be reaching the API limit and need to filter your results. Wait for a moment before trying your request again, and contact your administrator if the problem persists.
+Troubleshooting
+If you receive a 400 status code error response, make sure your requests comply with the following rules:
+
+Provide only valid metrics or dimensions that are supported by real-time requests.
+Pass only one metric per request. Currently, the service returns 400 if more than one is passed.
+Always specify your first dimension as variables/dateRangeMinute since real time reports are always time bound and reported over minute granularity.
+Provide combinations of metrics and dimensions that qualify only as as "overtime", "trended" or "breakdown" types.
+Supply search inputs for trended reports only.
+Specify the realTimeMinuteGranularity of at least 10 in the settings object.
+Do not pass statistics, identityOverrides, or bulkExportSettings. These are valid for normal reports but not for real-time.
+When using global filters, provide only a dateRange type entry.
+Do not include calculated metrics for real-time report requests.
+Do not incluce segment filtering for real-time report requests.
+Do not specify the start date of the report earlier than 20 hours ago (relative to report suite timezone).
+Do not specify the start date in the future.
+Request only 60 or fewer time periods per report.
+Always include a global date range in the format StartDate/EndDate (YYYY-MM-DDT00:00:00/YY-MM-DDT00:00:00). The start date cannot be earlier than the end date.
+Do not specify negative numbers for page parameters.
+
+
+Breakdown dimensions
+Adobe may add optional request and response members (name/value pairs) to existing API objects at any time and without notice or changes in versioning. Adobe recommends that you refer to the API documentation of any third-party tool you integrate with our APIs so that such additions are ignored in processing if not understood. If implemented properly, such additions are non-breaking changes for your implementation. Adobe will not remove parameters or add required parameters without first providing standard notification through release notes.
+
+Breakdowns in the reporting API are useful when you want to see the cross-product of values from two different dimensions. When requesting a breakdown report, use the metricsFilters and dimension parameters to request the additional dimension.
+
+The following example requests a breakdown report containing a list of the top five "Internal Search Terms" used by visitors who saw campaign 10. Within the metricsFilters parameter, the type is set to breakdown (line 21), and evar1 is the marketing campaign (line 22). Within the dimensions parameter, evar2 is the "Internal Search Terms" (line 27).
+
+Example breakdown
+Example request
+This section shows an example request and response of a dimension breakdown.
+
+To avoid making multiple reporting calls to retrieve item IDs, you can instead specify the text value for items instead of item IDs. If you already know the text value for the item, you can specify it with the itemValue parameter within the metricFilter object. For example, if the item is "Campaign 10", you can specify "itemValue" : "10" instead of "itemId":"743855946", as shown above. Use only the text value when specifying the itemValue. Passing an item value instead of item ID will result in slightly slower performance.
+
+Example Response
+{
+      "totalPages":2,
+      "firstPage":true,
+      "lastPage":false,
+      "numberOfElements":5,
+      "number":0,
+      "totalElements":7,
+      "columns":{
+         "dimension":{
+            "id":"variables/evar2",
+            "type":"string"
+         },
+         "columnIds":[
+            "0"
+         ]
+      },
+      "rows":[
+         {
+            "itemId":"1132341824",
+            "value":"red t-shirt",
+            "data":[
+               1515.0
+            ]
+         },
+         {
+            "itemId":"2400044733",
+            "value":"digital watches",
+            "data":[
+               1.0
+            ]
+         },
+         {
+            "itemId":"3351316813",
+            "value":"sport socks",
+            "data":[
+               11.0
+            ]
+         },
+         {
+            "itemId":"3440395251",
+            "value":"gps watch",
+            "data":[
+               95.0
+            ]
+         },
+         {
+            "itemId":"3614317595",
+            "value":"running shoes",
+            "data":[
+               16.0
+            ]
+         }
+      ],
+      "summaryData":{
+         "totals":[
+            2032.0
+         ]
+      }
+   }
+
+{
+      "totalPages":2,
+      "firstPage":true,
+      "lastPage":false,
+      "numberOfElements":5,
+      "number":0,
+      "totalElements":7,
+      "columns":{
+         "dimension":{
+            "id":"variables/evar2",
+            "type":"string"
+         },
+         "columnIds":[
+            "0"
+         ]
+      },
+      "rows":[
+         {
+            "itemId":"1132341824",
+            "value":"red t-shirt",
+            "data":[
+               1515.0
+            ]
+         },
+         {
+            "itemId":"2400044733",
+            "value":"digital watches",
+            "data":[
+               1.0
+            ]
+         },
+         {
+            "itemId":"3351316813",
+            "value":"sport socks",
+            "data":[
+               11.0
+            ]
+         },
+         {
+            "itemId":"3440395251",
+            "value":"gps watch",
+            "data":[
+               95.0
+            ]
+         },
+         {
+            "itemId":"3614317595",
+            "value":"running shoes",
+            "data":[
+               16.0
+            ]
+         }
+      ],
+      "summaryData":{
+         "totals":[
+            2032.0
+         ]
+      }
+   }
+Multi-level breakdowns
+Multiple level breakdowns with the Reports API is helpful for visualizing the cross-product of values from three or more dimensions.
+
+For example, if you create an interactive map to explore product sales by campaigns and regions, the Reports API can dynamically update the map as new data becomes available. This allows team members to select different map locations from which they can view the current campaigns and product sales for the region.
+
+In the following example, these levels are used:
+
+Top level: Visualize the Day dimension filtered by the Page Views and Visits metrics.
+Second level: Visualize the previous level of data after a specifying a Date and applying the Page dimension.
+Third level: Visualize the previous two levels of data after applying the Cities dimension to a specified page.
+For each level of the breakdown report below, a sample JSON request and response is provided.
+
+Top level report
+The top level report in the following example shows the dimension Day and includes the metrics Page Views and Visits. The date range is set to the week of November 18, 2018.
+
+multiple_breakdowns_example_1
+
+Top level request
+The JSON message request body for this report request follows:
+
+Request body
+Response
+{
+    "rsid": "examplersid",
+    "globalFilters": [
+        {
+            "type": "dateRange",
+            "dateRange": "YYYY-11-18T00:00:00.000/YYYY-11-25T00:00:00.000"
+        }
+    ],
+    "metricContainer": {
+        "metrics": [
+            {
+                "columnId": "0",
+                "id": "metrics/pageviews"
+            },
+            {
+                "columnId": "1",
+                "id": "metrics/visits"
+            }
+        ]
+    },
+    "dimension": "variables/daterangeday",
+    "settings": {
+        "countRepeatInstances": true,
+        "limit": 400,
+        "page": 0,
+        "dimensionSort": "asc"
+    }
+}
+
+{
+    "rsid": "examplersid",
+    "globalFilters": [
+        {
+            "type": "dateRange",
+            "dateRange": "YYYY-11-18T00:00:00.000/YYYY-11-25T00:00:00.000"
+        }
+    ],
+    "metricContainer": {
+        "metrics": [
+            {
+                "columnId": "0",
+                "id": "metrics/pageviews"
+            },
+            {
+                "columnId": "1",
+                "id": "metrics/visits"
+            }
+        ]
+    },
+    "dimension": "variables/daterangeday",
+    "settings": {
+        "countRepeatInstances": true,
+        "limit": 400,
+        "page": 0,
+        "dimensionSort": "asc"
+    }
+}
+Second level breakdown
+For the second level, you can break down a specific date by the Page dimension. In order to do this, note the previous JSON response for the Nov 19, 2018 date:
+
+"itemId": "1181019",
+"value": "Nov 19, 2018",
+"data": [
+    73,
+    37
+]
+
+"itemId": "1181019",
+"value": "Nov 19, 2018",
+"data": [
+    73,
+    37
+]
+The response shows itemId 1181019, so we will use that in our report request below.
+
+multiple_breakdowns_example_2
+
+Second level request
+The JSON message request body for this report request looks like the following. Note that the metricFilters attribute in the request contains a metric filter that corresponds to a metric in the metrics attribute of the request. Each metric has a filters array that applies metric filters to the metric column. In this example, we are applying metric filter 0 to the Page Views metric column and metric filter 1 to the Visits metric column.
+
+Second level request body
+Second level response
+{
+    "rsid": "examplersid",
+    "globalFilters": [
+        {
+            "type": "dateRange",
+            "dateRange": "YYYY-11-18T00:00:00.000/YYYY-11-25T00:00:00.000"
+        }
+    ],
+    "metricContainer": {
+        "metrics": [
+            {
+                "columnId": "0",
+                "id": "metrics/pageviews",
+                "filters": [
+                    "0"
+                ]
+            },
+            {
+                "columnId": "1",
+                "id": "metrics/visits",
+                "filters": [
+                    "1"
+                ]
+            }
+        ],
+        "metricFilters": [
+            {
+                "id": "0",
+                "type": "breakdown",
+                "dimension": "variables/daterangeday",
+                "itemId": "1181019"
+            },
+            {
+                "id": "1",
+                "type": "breakdown",
+                "dimension": "variables/daterangeday",
+                "itemId": "1181019"
+            }
+        ]
+    },
+    "dimension": "variables/page",
+    "settings": {
+        "countRepeatInstances": true,
+        "limit": 5,
+        "page": 0
+    }
+}
+
+{
+    "rsid": "examplersid",
+    "globalFilters": [
+        {
+            "type": "dateRange",
+            "dateRange": "YYYY-11-18T00:00:00.000/YYYY-11-25T00:00:00.000"
+        }
+    ],
+    "metricContainer": {
+        "metrics": [
+            {
+                "columnId": "0",
+                "id": "metrics/pageviews",
+                "filters": [
+                    "0"
+                ]
+            },
+            {
+                "columnId": "1",
+                "id": "metrics/visits",
+                "filters": [
+                    "1"
+                ]
+            }
+        ],
+        "metricFilters": [
+            {
+                "id": "0",
+                "type": "breakdown",
+                "dimension": "variables/daterangeday",
+                "itemId": "1181019"
+            },
+            {
+                "id": "1",
+                "type": "breakdown",
+                "dimension": "variables/daterangeday",
+                "itemId": "1181019"
+            }
+        ]
+    },
+    "dimension": "variables/page",
+    "settings": {
+        "countRepeatInstances": true,
+        "limit": 5,
+        "page": 0
+    }
+}
+Third level breakdown
+The third level of the example shows how to further break down the report by applying the Cities dimension to the page videoPage3. To do this, we use the itemId of the row containing VideoPage3 in the second level response, which is 364325780. Note the value in the request below:
+
+multiple_breakdowns_example_3
+
+Note that there are now 4 metric filters in the metricFilters array of the request. Filters 0 and 2 are applied to the Page Views metric column, and filters 1 and 3 are applied to the Visits metric column.
+
+Third level request body
+Third level response
+{
+    "rsid": "examplersid",
+    "globalFilters": [
+        {
+            "type": "dateRange",
+            "dateRange": "YYYY-11-18T00:00:00.000/YYYY-11-25T00:00:00.000"
+        }
+    ],
+    "metricContainer": {
+        "metrics": [
+            {
+                "columnId": "0",
+                "id": "metrics/pageviews",
+                "filters": [
+                    "0",
+                    "2"
+                ]
+            },
+            {
+                "columnId": "1",
+                "id": "metrics/visits",
+                "filters": [
+                    "1",
+                    "3"
+                ]
+            }
+        ],
+        "metricFilters": [
+            {
+                "id": "0",
+                "type": "breakdown",
+                "dimension": "variables/daterangeday",
+                "itemId": "1181019"
+            },
+            {
+                "id": "1",
+                "type": "breakdown",
+                "dimension": "variables/daterangeday",
+                "itemId": "1181019"
+            },
+            {
+                "id": "2",
+                "type": "breakdown",
+                "dimension": "variables/page",
+                "itemId": "364325780"
+            },
+            {
+                "id": "3",
+                "type": "breakdown",
+                "dimension": "variables/page",
+                "itemId": "364325780"
+            }
+        ]
+    },
+    "dimension": "variables/geocity",
+    "settings": {
+        "countRepeatInstances": true,
+        "limit": 5,
+        "page": 0
+    }
+}
+
+{
+    "rsid": "examplersid",
+    "globalFilters": [
+        {
+            "type": "dateRange",
+            "dateRange": "YYYY-11-18T00:00:00.000/YYYY-11-25T00:00:00.000"
+        }
+    ],
+    "metricContainer": {
+        "metrics": [
+            {
+                "columnId": "0",
+                "id": "metrics/pageviews",
+                "filters": [
+                    "0",
+                    "2"
+                ]
+            },
+            {
+                "columnId": "1",
+                "id": "metrics/visits",
+                "filters": [
+                    "1",
+                    "3"
+                ]
+            }
+        ],
+        "metricFilters": [
+            {
+                "id": "0",
+                "type": "breakdown",
+                "dimension": "variables/daterangeday",
+                "itemId": "1181019"
+            },
+            {
+                "id": "1",
+                "type": "breakdown",
+                "dimension": "variables/daterangeday",
+                "itemId": "1181019"
+            },
+            {
+                "id": "2",
+                "type": "breakdown",
+                "dimension": "variables/page",
+                "itemId": "364325780"
+            },
+            {
+                "id": "3",
+                "type": "breakdown",
+                "dimension": "variables/page",
+                "itemId": "364325780"
+            }
+        ]
+    },
+    "dimension": "variables/geocity",
+    "settings": {
+        "countRepeatInstances": true,
+        "limit": 5,
+        "page": 0
+    }
+}
+
+
+Example reporting API calls
+Use the following examples to help supplement the creation of API calls in your own organization. You can also use the Debugger within Analysis Workspace to view API calls tailored to your organization.
+
+Adobe may add optional request and response members (name/value pairs) to existing API objects at any time and without notice or changes in versioning. Adobe recommends that you refer to the API documentation of any third-party tool you integrate with our APIs so that such additions are ignored in processing if not understood. If implemented properly, such additions are non-breaking changes for your implementation. Adobe will not remove parameters or add required parameters without first providing standard notification through release notes.
+
+Ranked report example
+A basic report that uses a dimension and a metric. This example retrieves the top 5 eVar1 dimension values, sorted by the most page views.
+
+Request body
+Response
+{
+   "rsid":"examplersid",
+   "globalFilters":[
+      {
+         "type":"dateRange",
+         "dateRange":"YYYY-11-30T00:00:00.000/YYYY-12-06T23:59:59.999"
+      }
+   ],
+   "metricContainer":{
+      "metrics":[
+         {
+            "columnId":"0",
+            "id":"metrics/pageviews",
+            "filters":[
+               "0"
+            ]
+         }
+      ],
+      "metricFilters":[
+         {
+            "id":"0",
+            "type":"dateRange",
+            "dateRange":"YYYY-10-31T00:00:00.000/YYYY-12-06T23:59:59.999"
+         }
+      ]
+   },
+   "dimension":"variables/evar1",
+   "settings":{
+      "dimensionSort":"asc",
+      "limit":5
+   }
+}
+
+{
+   "rsid":"examplersid",
+   "globalFilters":[
+      {
+         "type":"dateRange",
+         "dateRange":"YYYY-11-30T00:00:00.000/YYYY-12-06T23:59:59.999"
+      }
+   ],
+   "metricContainer":{
+      "metrics":[
+         {
+            "columnId":"0",
+            "id":"metrics/pageviews",
+            "filters":[
+               "0"
+            ]
+         }
+      ],
+      "metricFilters":[
+         {
+            "id":"0",
+            "type":"dateRange",
+            "dateRange":"YYYY-10-31T00:00:00.000/YYYY-12-06T23:59:59.999"
+         }
+      ]
+   },
+   "dimension":"variables/evar1",
+   "settings":{
+      "dimensionSort":"asc",
+      "limit":5
+   }
+}
+Example trended report
+These reports include information about the performance of a metric (or metrics) over a period of time. This example retrieves the number of visits for each day over a week period.
+
+Request body
+Response:
+{
+   "rsid":"examplersid",
+   "globalFilters":[
+      {
+            "type":"dateRange",
+            "dateRange":"YYYY-10-31T00:00:00.000/YYYY-11-06T23:59:59.999"
+      }
+   ],
+   "metricContainer":{
+      "metrics":[
+         {
+            "columnId":"0",
+            "id":"metrics/pageviews",
+            "filters":[
+               "0"
+            ]
+         }
+      ],
+      "metricFilters":[
+         {
+            "id":"0",
+            "type":"dateRange",
+            "dateRange":"YYYY-10-31T00:00:00.000/YYYY-11-06T23:59:59.999"
+         }
+      ]
+   },
+   "dimension":"variables/daterangeday",
+   "settings":{
+      "dimensionSort":"asc"
+   }
+}
+
+{
+   "rsid":"examplersid",
+   "globalFilters":[
+      {
+            "type":"dateRange",
+            "dateRange":"YYYY-10-31T00:00:00.000/YYYY-11-06T23:59:59.999"
+      }
+   ],
+   "metricContainer":{
+      "metrics":[
+         {
+            "columnId":"0",
+            "id":"metrics/pageviews",
+            "filters":[
+               "0"
+            ]
+         }
+      ],
+      "metricFilters":[
+         {
+            "id":"0",
+            "type":"dateRange",
+            "dateRange":"YYYY-10-31T00:00:00.000/YYYY-11-06T23:59:59.999"
+         }
+      ]
+   },
+   "dimension":"variables/daterangeday",
+   "settings":{
+      "dimensionSort":"asc"
+   }
+}
+Example Anomaly Detection Report
+You can use the API to identify anomalies in a metric over a given time period. This type of report is helpful in setting up automated alert tools or dashboards to report the same information as the UI. When using this feature, anomalies are reported for values outside the upper or lower bound of the confidence bands. The building model and confidence bands are pre-defined in Analytics by calculated historical norms.
+
+The response shows an anomaly condition and identifies the following five properties with their corresponding values:
+
+data - The actual detected value for the metric (lines 21 and 40)
+dataExpected - The calculated expected value for the metric (lines 23 and 42)
+dataUpperBound - The upper limit of the confidence band (lines 26 and 45)
+dataLowerBound - The lower limit of the confidence band (lines 29 and 48)
+dataAnomalyDetected - An indicator of whether the metric value is outside of the confidence bands, i.e. True if detected (lines 33-34 and 52-53).
+Request body
+Response
+{
+   "rsid":"examplersid",
+   "globalFilters":[
+      {
+         "type":"dateRange",
+         "dateRange":"YYYY-04-16T00:00:00.000/YYYY-04-24T23:59:59.999"
+      }
+   ],
+   "metricContainer":{
+      "metrics":[
+         {
+            "columnId":"0",
+            "id":"metrics/pageviews",
+            "filters":[
+               "0"
+            ]
+         }
+      ],
+      "metricFilters":[
+         {
+            "id":"0",
+            "type":"dateRange",
+            "dateRange":"YYYY-04-16T00:00:00.000/YYYY-04-24T23:59:59.999"
+         }
+      ]
+   },
+   "dimension":"variables/daterangeday",
+   "settings":{
+      "dimensionSort":"asc",
+      "includeAnomalyDetection":true
+   }
+}
+
+{
+   "rsid":"examplersid",
+   "globalFilters":[
+      {
+         "type":"dateRange",
+         "dateRange":"YYYY-04-16T00:00:00.000/YYYY-04-24T23:59:59.999"
+      }
+   ],
+   "metricContainer":{
+      "metrics":[
+         {
+            "columnId":"0",
+            "id":"metrics/pageviews",
+            "filters":[
+               "0"
+            ]
+         }
+      ],
+      "metricFilters":[
+         {
+            "id":"0",
+            "type":"dateRange",
+            "dateRange":"YYYY-04-16T00:00:00.000/YYYY-04-24T23:59:59.999"
+         }
+      ]
+   },
+   "dimension":"variables/daterangeday",
+   "settings":{
+      "dimensionSort":"asc",
+      "includeAnomalyDetection":true
+   }
+}
+Media Concurrent Viewers report example
+Media concurrent viewers report is a time series report with two specialized metrics.
+
+metrics/concurrent_viewers_visitors counts the number of unique visitors.
+metrics/concurrent_viewers_occurrences counts the number of active sessions.
+These metrics can be rolled up to different granularity based on the dimension. For example unique visitors per minute or unique visitors per day etc. These are different dimensions available for media concurrent viewers report.
+
+variables/daterangeminute
+variables/daterangehour
+variables/daterangeday
+variables/daterangeweek
+variables/daterangemonth
+variables/daterangequarter
+variables/daterangeyear
+The following request example includes both a JSON message request body to request number of unique visitors.
+
+Request body
+Response
+{
+    "rsid": "examplersid",
+    "locale": "en_US",
+    "dimension": "variables/daterangeminute",
+    "globalFilters": [
+        {
+            "dateRange": "YYYY-08-01T00:00/YYYY-08-01T00:05",
+            "type": "dateRange"
+        }
+    ],
+    "metricContainer": {
+        "metrics": [
+            {
+                "columnId": "column1",
+                "id": "metrics/concurrent_viewers_visitors"
+            }
+        ]
+    },
+    "settings": {
+        "dimensionSort": "asc",
+        "limit": "100",
+        "page": 0
+  } 
+}
+
+{
+    "rsid": "examplersid",
+    "locale": "en_US",
+    "dimension": "variables/daterangeminute",
+    "globalFilters": [
+        {
+            "dateRange": "YYYY-08-01T00:00/YYYY-08-01T00:05",
+            "type": "dateRange"
+        }
+    ],
+    "metricContainer": {
+        "metrics": [
+            {
+                "columnId": "column1",
+                "id": "metrics/concurrent_viewers_visitors"
+            }
+        ]
+    },
+    "settings": {
+        "dimensionSort": "asc",
+        "limit": "100",
+        "page": 0
+  } 
+}
+
+
+Search filters
+Use search filters to limit the data returned so that reports show only the values you need. For example, if you have thousands of records but only a few have needed reports, you can use filtering to return and find them quickly. Some filters also allow you to include, group, or present data in convenient formats, such as breakdown reports.
+
+You can use the search parameter to filter your results more narrowly. The search parameter includes the following options:
+
+itemId - A single ID to include in the report
+itemIds - A list of itemIds to include in the report (shown in the example)
+excludeItemIds - A list of itemIds to exclude in the report
+clause - A search clause to use when filtering dimensions
+includeSearchTotal - Includes a special element called 'searchTotals' in the response that contains the total of the filtered items. The default is false.
+Adobe may add optional request and response members (name/value pairs) to existing API objects at any time and without notice or changes in versioning. Adobe recommends that you refer to the API documentation of any third-party tool you integrate with our APIs so that such additions are ignored in processing if not understood. If implemented properly, such additions are non-breaking changes for your implementation. Adobe will not remove parameters or add required parameters without first providing standard notification through release notes.
+
+Example search Request
+The following example requests data only for campaigns "10" and "11" with the search parameter by using their itemIds (line 9). The response returns the data requested for the itemId associated with campaigns 10 and 11 (lines 18-21 and 25-28).
+
+Request body
+Response
+{
+   "rsid":"examplersid",
+   "globalFilters":[
+      {
+         "type":"dateRange",
+         "dateRange":"YYYY-01-31T00:00:00.000/YYYY-02-06T23:59:59.999"
+      }
+   ],
+   "search":{
+      "itemIds":[743855946,511036305]
+   },
+   "metricContainer":{
+      "metrics":[
+         {
+            "columnId":"0",
+            "id":"metrics/pageviews",
+            "filters":[
+               "0"
+            ]
+         }
+      ],
+      "metricFilters":[
+         {
+            "id":"0",
+            "type":"dateRange",
+            "dateRange":"YYYY-01-31T00:00:00.000/YYYY-02-06T23:59:59.999"
+         }
+      ]
+   },
+   "dimension":"variables/evar1",
+   "settings":{
+      "dimensionSort":"asc",
+      "limit":5
+   }
+}
+
+{
+   "rsid":"examplersid",
+   "globalFilters":[
+      {
+         "type":"dateRange",
+         "dateRange":"YYYY-01-31T00:00:00.000/YYYY-02-06T23:59:59.999"
+      }
+   ],
+   "search":{
+      "itemIds":[743855946,511036305]
+   },
+   "metricContainer":{
+      "metrics":[
+         {
+            "columnId":"0",
+            "id":"metrics/pageviews",
+            "filters":[
+               "0"
+            ]
+         }
+      ],
+      "metricFilters":[
+         {
+            "id":"0",
+            "type":"dateRange",
+            "dateRange":"YYYY-01-31T00:00:00.000/YYYY-02-06T23:59:59.999"
+         }
+      ]
+   },
+   "dimension":"variables/evar1",
+   "settings":{
+      "dimensionSort":"asc",
+      "limit":5
+   }
+}
+Using clause Parameters
+The search parameter also includes the clause option. The clause parameter provides a powerful tool for filtering data. To use it, follow these rules:
+
+It uses boolean operators AND, OR, and NOT.
+It uses operators MATCH, CONTAINS, BEGINS-WITH, and ENDS-WITH.
+It uses group conditions with parenthesis.
+Strings are contained in single quotes.
+Searches are case-insensitive.
+If no operator is specified, a 'contains' match is performed.
+Valid operators are 'match' and 'contains'.
+Glob expressions are evaluated. If a literal * is needed, use \*.
+Example Clause statements
+Only include results that match the string 'home page': MATCH 'home page'
+Include pages that do not contain 'home page': NOT CONTAINS 'home page'
+Include pages that do not contain 'home page' or 'about us', but do contain 'contact us': (NOT CONTAINS 'home page' OR NOT CONTAINS 'about us') AND (CONTAINS 'contact us')
+Include pages that contain 'home page' or start with 'landing': CONTAINS 'home page' OR BEGINS-WITH 'landing'
+
+Use segments in the reporting API
+This help page describes how to use segments in the Reporting API. For more information around how to use the segments endpoint, see Segments in the Segments API guide.
+
+You can include a segment in your report by adding it to the globalFilters property.
+
+   ...
+   "globalFilters":[
+      {
+         "type":"dateRange",
+         "dateRange":"2014-06-01T00:00/2014-06-21T00:00"
+      },
+      {
+         "type":"segment",
+         "segmentId":"53adb46be4b0a2a175bf38c4"
+      }
+   ],
+   ...
+
+   ...
+   "globalFilters":[
+      {
+         "type":"dateRange",
+         "dateRange":"2014-06-01T00:00/2014-06-21T00:00"
+      },
+      {
+         "type":"segment",
+         "segmentId":"53adb46be4b0a2a175bf38c4"
+      }
+   ],
+   ...

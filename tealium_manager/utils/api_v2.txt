@@ -1,0 +1,233 @@
+Authentication
+This article describes the authentication methods used in Tealium V2 APIs.
+
+This article provides information needed to begin using the Tealium v2 API. The previous v1 API is still available, but will eventually be deprecated.
+
+Authentication
+Authentication (login) requires an API key from Tealium iQ Tag Management. Learn more about Managing and Generating API Keys.
+
+The authentication call has two parameters: username and the API key. The API key is used in place of a password to log in to the API. After a successful login to the API, the authentication call returns a JWT, referred to as a bearer token. The bearer token, which is valid for 30 minutes, is the value that must be used to authenticate subsequent API calls.
+
+Do not generate a new bearer token for every call. Use the token until it expires. Failure to use the token in this manner will result in auth call throttling at Tealium’s discretion.
+
+cURL request
+The following cURL request shows the variables required for the API key exchange for a JWT token. The URL, username, and API key are encoded.
+
+Copy to clipboard
+curl -X POST \
+https://api.tealiumiq.com/v2/auth \
+-H 'Content-Type: application/x-www-form-urlencoded' \
+--data-urlencode 'username={email}' \
+--data-urlencode 'key={api_key}'
+Example request
+Copy to clipboard
+curl -X POST \
+https://api.tealiumiq.com/v2/auth \
+-H 'Content-Type: application/x-www-form-urlencoded' \
+--data-urlencode 'username=tealium.user@yourdomain.com' \
+--data-urlencode 'key=7O4Pjn8tuc0%5B3Nc2)%7DyXJW8EaCuDRA1U8Jn%23p)qc*O94(*ubIeEUz%25%5D%242~)WKlLB'
+Example response
+Copy to clipboard
+* Trying 192.0.2.0...
+* Connected to api.tealiumiq.com (192.0.2.0) port 443 (#0)
+* TLS 1.2 connection using TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+* Server certificate: *.tealiumiq.com
+* Server certificate: DigiCert SHA2 Secure Server CA
+* Server certificate: DigiCert Global Root CA
+> POST /v2/auth HTTP/1.1
+> Host: qa20-api.tealiumiq.com
+> User-Agent: curl/7.43.0
+> Accept: */*
+> cache-control: no-cache
+> content-type: application/x-www-form-urlencoded
+> Content-Length: 127
+>
+* upload completely sent off: 127 out of 127 bytes
+< HTTP/1.1 200 OK
+< Date: Wed, 14 Feb 2018 19:04:22 GMT
+< Content-Type: application/json
+< Content-Length: 893
+< Connection: keep-alive
+< Cache-Control: no-cache,no-store,must-revalidate
+< Pragma: no-cache
+< Expires: 0
+< X-XSS-Protection: 1;mode=block
+< X-NodeId: i-0afb3e9b53ba15930
+< X-Version: 1.0.130-SNAPSHOT
+< Set-Cookie: rememberMe=deleteMe; Path=/urest_service; Max-Age=0; Expires=Tue, 13-Feb-2018 19:10:41 GMT
+<
+* Connection #0 to host api.tealiumiq.com left intact
+{"token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzUxMiJ9.eyJzdWIiOiJtYXJjLmhpcG9saXRvQHRlYWxpdW0uY29tIiwibmJmIjoxNTE4NjM1NDQxLCJpc3MiOiJodHRwczovL2FwaS50ZWFsaXVtaXEuY29tIiwiZXhwIjoxNTE4NjM3MjQxLCJpYXQiOjE1MTg2MzU0NDF9.EPM_hfocfiF4SJnW0gBrGb9BuYIxsyoRdIWeuMTDLEBroVixmkFnPRC3G9zfn1hEpGfOGL6OKSHPIm5GwJQCNyIX7cE8umheIyTk8xxOuCAKjTOCip_6-AaFBcj6nLxgyez4OgxLral1XmZxyb9mP-vrKeDDQUf4ygdhgeDYoqnfQtIZ8TA68Pcx3H7BLgd0MJjTh7S74-9bWX95PkDDizTg0ia1dIbHsMXsB1ZA6gS-WPrCuy0CNA0IvJo0XuFNoOF2mazREYvG-Yp0-EzlMTa3W_EoI_93F9RbG-soUrLdV5IKav4TjwWfvyOZTx4Tb_Je9NgJ_EfeWW_E84pSAtCo7QX2yXZ3MYROkNnRdsQG4XhaFUbXwJnUghl65MHyjQxINDtbB5vujk04ctnuQvSO-sZslQxXGJm1sBiY3eFa5U4-L0V4MCJ3s9h_RbRyPt07CD4YX85kRJ5mj8x6nFHDE2iwrpSnNlQ_3KctqlJHSNdYhWzSnLpfz5qKq_Uv6XA88lUoRMiCC-Hy2uZe_vrqA0p_-BbrXPvw8olhd0SGD36D982bxKkcJR84ACUPU36FSBRWs_HRWEyjTwWR33oRv3vEIpzlUvp7TEGiD7A5ucNvLUT1yV_8YdsNLEevFg7WWjXkKnYDprq1QikO6KV1drWfrJnLldJ4ziTtK20"}
+
+Tealium API request format
+This article describes the request format for Tealium APIs.
+
+The previous v1 API is still available, but will eventually be deprecated.
+
+Root URL
+Each API has its own endpoint and supported parameters. The root URL for all API requests is:
+
+Copy to clipboard
+https://api.tealiumiq.com/v2
+An API endpoint is documented with a specific HTTP method and path, for example:
+
+Copy to clipboard
+GET /revisions
+Some endpoints show placeholder variables ( {variable}) to indicate values that you supply. Most endpoints require the name of the your iQ Tag Management (TiQ) account and profile in the path of the call.
+
+Example API endpoint path for TiQ revisions:
+
+Copy to clipboard
+https://api.tealiumiq.com/v2/accounts/{account}/{profile}/revisions
+Request and response format
+The API supports JavaScript Object Notation (JSON). API requests that use JSON require the following header setting:
+
+Copy to clipboard
+Content-Type: application/json
+Most responses are in JSON format. Documentation for each endpoint contains example cURL calls and responses.
+
+About iQ Revisions API
+This article describes how to use the iQ Revisions API.
+
+How it works
+A new revision is created each time a Save as action is performed. As each version is updated or published, the status is reflected in the revision.
+
+Prerequisites
+The iQ Revisions API must be activated for your account before it will return revision information. Contact Support Desk to request the activation.
+
+Authentication
+The bearer token is used to authenticate all API calls and not the API key. The API key is only used in the authentication call.
+
+See the Getting Started guide to learn about generating a bearer token from the API key.
+
+
+iQ Revisions objects
+Revisions are returned as JSON objects.
+
+Available fields
+Parameter	Type	Description
+revision_id	string	The timestamp of the revision represented as a string in the format of YYYYMMDDHHMMSS.
+created_by	email	The email of the user that created the revision.
+comment	string	The comment left by the user at the time the revision was created.
+targets_published	array	An array of the environment names for the publish targets used.
+name	string	The name given to the revision.
+time_created	string	A string representation of the time of creation, for example: Tue 2017.12.13 19:54 GMT.
+account	string	The account name for the revision.
+profile	string	The profile name for the revision.
+checksums	object	The values in targets_published is a key factor in the checksums object. The values contain a checksums value for each JavaScript file published to that target.
+Example response
+Copy to clipboard
+{
+    "account": "tealium",
+    "profile": "main",
+    "name": "Full Release - 2025/01/02 19:53",
+    "time_created": "Thu 2025.01.02 19:53 GMT",
+    "checksums": {
+        "prod": {
+            "manifest.json": "df8bb8bdb8bc34f9d70d98ff49fdcf53e7f286520747001538b74357418178a2",
+            "bundle.zip": "9309364527db38cd33538ca239929c3ed89b7b6990e99b4a41d16b50dd519e35",
+            "utag.sync.js": "7cdc832b67612bb053f2e4a91ea9eab2aeb4bd26bae9668cbf5bb58bb6a2e9a1",
+            "utag.js": "3c34236708b14e8fd8a82e5c363d006793fd59fc6f6a6f0367634cf245d16861",
+            "utag.1.js": "9b911570ac0685a50a3a32ef780a2570b16725779b7336bdbfca2838eea6d216",
+            "utag.v.js": "31fd720e49c140f869999210c239f3cf89fd7ad0e7fd88b7b7af75612479cbcc",
+            "mobile.html": "c5e99a1378a590ddf42bbc810d7c941ee98cfd0611abc1bf439d649cdb000bf7"
+        }
+    },
+    "revision_id": "201712131954",
+    "comment": "up to date publish",
+    "created_by": "user@example.com",
+    "targets_published": ["prod"]
+}
+
+iQ Revisions API endpoints
+The GET iQ Revisions API uses JSON objects to retrieve revisions data.
+
+GET revisions
+GET Revisions returns an array of revision IDs. The revision ID is the timestamp of the revision in the form of YYYYMMDDHHMM. This ID is used to fetch the revision details.
+
+Use the following GET command to list revisions:
+
+Copy to clipboard
+GET /v2/manifest/accounts/{account}/profiles/{profile}/revisions
+Example cURL request
+Copy to clipboard
+curl -H 'Authorization: Bearer {token}' \
+https://api.tealiumiq.com/v2/manifest/accounts/{account}/profiles/{profile}/revisions
+Example response
+Copy to clipboard
+["201508181719",
+ "201508181718",
+ "201508181717"]
+Revision IDs are listed in reverse chronological order with the newest revision listed first.
+
+Error messages
+Potential error messages for this task are:
+
+Error Message	Description
+404 Not Found	{"returnCode" : 1240, "message" : "Account was not found"}
+404 Not Found	{"returnCode" : 1250, "message" : "Profile was not found"}
+Get revision details
+GET Revision Details returns the details for the specified revision.
+
+Use the following GET command to return details about a revision:
+
+Copy to clipboard
+GET /v2/manifest/accounts/{account}/profiles/{profile}/revisions/{revision_id}/details
+Example cURL request
+Copy to clipboard
+curl -H 'Authorization: Bearer {token}' \
+https://api.tealiumiq.com/v2/manifest/accounts/{account}/profiles/{profile}/revisions/{revision_id}/details
+Example Response
+Copy to clipboard
+{
+    "account": "tealium",
+    "profile": "profile",
+    "name": "Full Release - 2016/12/13 19:53",
+    "time_created": "Tue 2016.12.13 19:54 GMT",
+    "checksums": {
+        "prod": {
+            "manifest.json": "df8bb8bdb8bc34f9d70d98ff49fdcf53e7f286520747001538b74357418178a2",
+            "bundle.zip": "9309364527db38cd33538ca239929c3ed89b7b6990e99b4a41d16b50dd519e35",
+            "utag.js": "3c34236708b14e8fd8a82e5c363d006793fd59fc6f6a6f0367634cf245d16861",
+            "utag.1.js": "9b911570ac0685a50a3a32ef780a2570b16725779b7336bdbfca2838eea6d216",
+            "utag.2.js": "0d3cbf8b3d275d181c2140c2eab88ead3c9f2002b5260d9ebd9f23cb7b60de9a"
+        }
+    },
+    "revision_id": "201612131954",
+    "comment": "up to date publish",
+    "created_by": "user@example.com",
+    "targets_published": ["prod"]
+}
+Error messages
+Potential error messages for this task are:
+
+Error Message	Description
+404 Not Found	{"returnCode" : 1240, "message" : "Account was not found" }
+404 Not Found	{"returnCode" : 1250, "message" : "Profile was not found" }
+404 Not Found	{"returnCode" : 1260, "message" : "Revision details do not exist"}
+GET revision bundle
+A revision bundle is the deployable combination of published JavaScript files for the target environment in the form of a .zip file. If a revision was published, the value from targets_published is used in this endpoint to retrieve the files you want, such as prod.
+
+Copy to clipboard
+GET /v2/manifest/accounts/{account}/profiles/{profile}/revisions/{revision_id}/environments/{environment}
+This endpoint only works for the latest published revision, not previous revisions.
+
+Example cURL request
+Copy to clipboard
+curl -H 'Authorization: Bearer {token}' \
+https://api.tealiumiq.com/v2/manifest/accounts/{account}/profiles/{profile}/revisions/{revision_id}/environments/{environment}
+--output distro.zip
+Example response
+The response for the cURL command is the return of a .zip file containing the following individual files:
+
+File Name	Contents
+utag.js	The main loader file
+utag.*.js	The vendor tag files, such as utag.13.js
+utag.sync.js	(Optional) Contains the synchronous loader file
+mobile.html	(Optional) Contains the mobile library configuration
+manifest.json	A JSON file containing the information returned by the Revision Details endpoint. Note: The SHA256 for the bundle is not included.
+Error messages
+Potential error messages for this task are:
+
+Error Message	Description
+404 Not Found	{"returnCode" : 1270, "message" : "The revision bundle requested is not the latest"}
