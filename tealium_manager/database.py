@@ -258,6 +258,20 @@ def set_cached_data(cache_key: str, data: Dict, etag: Optional[str] = None):
     conn.commit()
     conn.close()
 
+def get_profile_cache_info() -> List[Dict]:
+    """Retrieves metadata (name, timestamp) for all cached Tealium profiles."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT config_name, timestamp FROM profile_cache")
+        cached_profiles = [dict(row) for row in cursor.fetchall()]
+        return cached_profiles
+    except sqlite3.Error as e:
+        print(f"Error fetching profile cache info: {e}")
+        return []
+    finally:
+        conn.close()
+
 # --- DB Status and Maintenance ---
 
 def get_db_status() -> Dict:

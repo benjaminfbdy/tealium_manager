@@ -5,3 +5,4 @@ pandas
 pytz
 PyJWT
 cryptography
+aiohttp

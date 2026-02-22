@@ -1,34 +1,22 @@
 import streamlit as st
 from views.component_renderers import setup_page
-from controllers.config_controller import handle_download_profile, get_database_status
+from controllers.config_controller import handle_download_profile
+import database as db
+import pandas as pd
 
 # --- Page Configuration ---
 setup_page()
-
-st.title("⚙️ Configuration Tealium")
-
-# --- Initialize Session State ---
-if 'active_tealium_config' not in st.session_state:
-    st.session_state.active_tealium_config = None
-
-# --- Helper Functions ---
-def set_active_tealium(profile_name, profile_config):
-    """Sets the selected Tealium profile as active in the session state."""
-    # Merge profile-specific config with global credentials
-    full_config = st.secrets.global_credentials.to_dict()
-    full_config.update(profile_config)
-    st.session_state.active_tealium_config = full_config
-    st.session_state.active_tealium_profile_name = profile_name
-    st.success(f"Profil Tealium '{profile_name}' activé pour cette session.")
+st.title("⚙️ Configuration & Cache Tealium")
+st.write("Gérez les profils Tealium définis dans `secrets.toml` et mettez en cache leur configuration.")
 
 # --- Load Configurations from secrets.toml ---
 try:
     tealium_profiles = st.secrets.tealium_profiles.to_dict()
     global_creds = st.secrets.global_credentials
+    # Ensure global credentials exist
     if not all([global_creds.get("tealium_api_username"), global_creds.get("tealium_api_key")]):
-        st.error("Erreur : Les identifiants globaux `tealium_api_username` et `tealium_api_key` sont requis dans votre fichier `secrets.toml`.")
-        st.stop()
-except Exception:
+        raise KeyError("Identifiants globaux manquants")
+except (AttributeError, KeyError):
     st.error("Erreur : La section `[tealium_profiles]` ou `[global_credentials]` est mal configurée ou manquante dans votre fichier `secrets.toml`.")
     st.info("""
         Assurez-vous que votre fichier `secrets.toml` contient :
@@ -48,50 +36,42 @@ if not tealium_profiles:
     st.warning("Aucun profil Tealium n'a été trouvé dans votre fichier `secrets.toml` sous la section `[tealium_profiles]`.")
     st.stop()
 
-st.info(f"{len(tealium_profiles)} profil(s) Tealium trouvé(s) dans votre fichier `secrets.toml`.")
-st.divider()
+# Get cache info from the database
+try:
+    cached_profiles_info = {item['config_name']: item['timestamp'] for item in db.get_profile_cache_info()}
+except Exception as e:
+    st.error(f"Impossible de lire l'état du cache de la base de données : {e}")
+    cached_profiles_info = {}
 
 # --- Display Profiles ---
-active_profile_name = st.session_state.get('active_tealium_profile_name')
-
 for name, config in tealium_profiles.items():
-    is_active = (name == active_profile_name)
-    status = " (Actif)" if is_active else ""
-    
-    with st.container():
-        st.subheader(f"Profil : {name}{status}")
+    with st.expander(f"Profil : {name}", expanded=True):
+        col1, col2 = st.columns([2, 1])
         
-        cols = st.columns([2, 2, 1, 1])
-        cols[0].text(f"Compte: {config.get('account')}")
-        cols[1].text(f"Profil: {config.get('profile')}")
+        with col1:
+            st.markdown(f"**Compte :** `{config.get('account')}`")
+            st.markdown(f"**Profil :** `{config.get('profile')}`")
 
-        if not is_active:
-            if cols[2].button("Activer", key=f"activate_tealium_{name}"):
-                set_active_tealium(name, config)
-                st.rerun()
-
-        if is_active:
-            # The download button should only be available for the active profile to avoid confusion
-            if cols[3].button("Mettre en Cache", key=f"cache_tealium_{name}"):
-                # We need to create the config dict expected by the controller function
-                full_config_for_download = st.secrets.global_credentials.to_dict()
+            if name in cached_profiles_info:
+                timestamp = pd.to_datetime(cached_profiles_info[name], unit='s').strftime('%d/%m/%Y %H:%M')
+                st.info(f"✅ En cache (dernière mise à jour : {timestamp})")
+            else:
+                st.warning("❌ Non mis en cache")
+        
+        with col2:
+            if st.button("Rafraîchir le cache", key=f"cache_tealium_{name}"):
+                # We need to create the full config dict expected by the controller function
+                full_config_for_download = global_creds.to_dict()
                 full_config_for_download.update(config)
 
                 with st.spinner(f"Mise en cache du profil '{name}'..."):
                     success = handle_download_profile(name, full_config_for_download)
+                
                 if success:
                     st.success(f"Mise en cache du profil '{name}' terminée avec succès !")
+                    st.rerun() # Rerun to update the cache status display
                 else:
-                    st.error(f"Échec de la mise en cache du profil '{name}'. Vérifiez les logs.")
+                    st.error(f"Échec de la mise en cache du profil '{name}'. Vérifiez les logs pour plus de détails.")
 
-        st.divider()
-
-# --- Database Status Section ---
-st.header("Statut de la Base de Données (Cache Tealium)")
-
-db_status = get_database_status()
-if db_status.get("status") == "OK":
-    st.write(f"**Profils Tealium mis en cache :** {db_status.get('cached_items_count', 0)} objets")
-    st.caption(f"La base de données de cache est opérationnelle.")
-else:
-    st.error(f"**Statut de la base de données :** {db_status.get('status')} - {db_status.get('message', '')}")
+st.divider()
+st.info("💡 Le cache d'un profil contient sa configuration complète (variables, tags, extensions...). Il est utilisé par la fonctionnalité 'Inventaire'.")

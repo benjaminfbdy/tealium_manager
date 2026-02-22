@@ -1,66 +1,28 @@
 import streamlit as st
 from views.component_renderers import setup_page
 import pandas as pd
-from controllers.config_controller import test_adobe_discovery, get_database_status
-from controllers.adobe_controller import get_or_refresh_components
+from controllers.adobe_controller import get_report_suites, get_or_refresh_components
 from utils.adobe_repo import get_adobe_components_cache_info
+import time
 
 # --- Page Configuration ---
 setup_page()
-
-st.title("⚙️ Configuration Adobe Analytics")
-
-# --- Initialize Session State ---
-if 'active_adobe_config' not in st.session_state:
-    st.session_state.active_adobe_config = None
-
-# --- Helper Functions ---
-def set_active_adobe(profile_name, profile_config):
-    """Sets the selected Adobe profile as active in the session state."""
-    st.session_state.active_adobe_config = profile_config
-    st.session_state.active_adobe_profile_name = profile_name
-    st.success(f"Profil Adobe '{profile_name}' activé pour cette session.")
-
-def _render_adobe_cache_section():
-    """Renders the UI for managing the Adobe components cache."""
-    st.header("Gestion du Cache des Composants Adobe")
-    st.write("Les composants (dimensions, métriques, segments) sont mis en cache pour accélérer le chargement du dashboard. Vous pouvez forcer un rafraîchissement ici.")
-    
-    cached_items = get_adobe_components_cache_info()
-    
-    if not cached_items:
-        st.info("Aucun composant Adobe n'est actuellement en cache.")
-        return
-    
-    for item in cached_items:
-        rsid = item['rsid']
-        last_updated_str = pd.to_datetime(item['last_updated'], unit='s').strftime('%Y-%m-%d %H:%M:%S')
-        
-        cols = st.columns([3, 2, 1])
-        cols[0].text(f"Report Suite (RSID): {rsid}")
-        cols[1].text(f"Dernière mise à jour : {last_updated_str}")
-        if cols[2].button("Rafraîchir", key=f"refresh_cache_{rsid}"):
-            with st.spinner(f"Rafraîchissement des composants pour {rsid}..."):
-                _, error_msg = get_or_refresh_components(rsid, force_refresh=True)
-                if error_msg:
-                    st.error(f"Erreur lors du rafraîchissement pour {rsid}: {error_msg}")
-                else:
-                    st.success(f"Cache pour {rsid} rafraîchi avec succès !")
-                    st.rerun()
-    st.divider()
+st.title("⚙️ Configuration & Cache Adobe Analytics")
+st.write("Gérez les comptes Adobe définis dans `secrets.toml` et mettez en cache les composants des Report Suites (RSID) que vous utilisez le plus souvent.")
 
 # --- Load Configurations from secrets.toml ---
 try:
     adobe_profiles = st.secrets.adobe_profiles.to_dict()
-except Exception:
+except (AttributeError, KeyError):
     st.error("Erreur : La section `[adobe_profiles]` est mal configurée ou manquante dans votre fichier `secrets.toml`.")
     st.info("""
-        Assurez-vous que votre fichier `secrets.toml` contient :
+        Assurez-vous que votre fichier `secrets.toml` contient au moins un profil, par exemple :
         ```toml
-        [adobe_profiles.MON_PROFIL]
+        [adobe_profiles.mon_profil]
         global_company_id = "votre_id_compagnie"
         client_id = "votre_client_id"
         client_secret = "votre_client_secret"
+        # etc...
         ```
     """)
     st.stop()
@@ -69,43 +31,88 @@ if not adobe_profiles:
     st.warning("Aucun profil Adobe n'a été trouvé dans votre fichier `secrets.toml` sous la section `[adobe_profiles]`.")
     st.stop()
 
-st.info(f"{len(adobe_profiles)} profil(s) Adobe trouvé(s) dans votre fichier `secrets.toml`.")
-
-# --- Discovery Test Result ---
-if 'adobe_discovery_result' in st.session_state and st.session_state.adobe_discovery_result:
-    with st.expander("Résultat du Test de Découverte Adobe", expanded=True):
-        st.json(st.session_state['adobe_discovery_result'])
-        if st.button("Fermer le résultat du test"):
-            st.session_state['adobe_discovery_result'] = None
-            st.rerun()
-
-st.divider()
+# --- Helper function to get report suites with caching in session_state ---
+@st.cache_data(ttl=3600) # Cache the list of suites for 1h to avoid repeated API calls
+def _get_suites_for_profile(_config_name, adobe_config):
+    suites, error = get_report_suites(adobe_config)
+    if error:
+        st.error(f"Erreur lors de la récupération des Report Suites pour '{_config_name}': {error}")
+        return {}
+    return {s['rsid']: s['name'] for s in suites}
 
 # --- Display Profiles ---
-active_profile_name = st.session_state.get('active_adobe_profile_name')
-
 for name, config in adobe_profiles.items():
-    is_active = (name == active_profile_name)
-    status = " (Actif)" if is_active else ""
-    
-    with st.container():
-        st.subheader(f"Profil : {name}{status}")
+    with st.expander(f"Compte : {name} ({config.get('global_company_id')})", expanded=True):
         
-        cols = st.columns([3, 1, 1])
-        cols[0].text(f"Global Company ID: {config.get('global_company_id')}")
+        # --- Connection and Suite Loading ---
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.write(f"**Client ID:** `{config.get('client_id') or config.get('api_key')}`")
+        
+        # We need the full config dict for the controller functions
+        full_config = dict(config)
 
-        if not is_active:
-            if cols[1].button("Activer", key=f"activate_adobe_{name}"):
-                set_active_adobe(name, config)
+        # Get report suites for the current profile
+        suite_options = _get_suites_for_profile(name, full_config)
+
+        if not suite_options:
+            st.warning("Aucune Report Suite n'a pu être chargée pour ce compte. Vérifiez la configuration et la connexion.")
+            continue
+
+        # --- Cache Management for RSIDs ---
+        st.write("---")
+        st.subheader("Mise en cache des composants par Report Suite")
+        
+        # Get cache info from our database
+        cached_rsids_info = {item['rsid']: item['last_updated'] for item in get_adobe_components_cache_info()}
+
+        # Format options for multiselect to include cache status
+        def format_rsid_option(rsid):
+            name = suite_options[rsid]
+            if rsid in cached_rsids_info:
+                timestamp = pd.to_datetime(cached_rsids_info[rsid], unit='s').strftime('%d/%m/%Y %H:%M')
+                return f"✅ {name} ({rsid}) - Cache du {timestamp}"
+            return f"❌ {name} ({rsid}) - Non mis en cache"
+
+        # Let user select which RSIDs to cache
+        selected_rsids = st.multiselect(
+            "Choisissez les Report Suites à mettre en cache :",
+            options=list(suite_options.keys()),
+            format_func=format_rsid_option,
+            key=f"multiselect_{name}"
+        )
+
+        if st.button("Rafraîchir le cache pour la sélection", key=f"refresh_{name}"):
+            if not selected_rsids:
+                st.warning("Veuillez sélectionner au moins une Report Suite.")
+            else:
+                st.info(f"Lancement de la mise en cache pour {len(selected_rsids)} Report Suite(s)...")
+                progress_bar = st.progress(0)
+                
+                # --- This is where the new, selective caching logic happens ---
+                # This could be a new function in adobe_controller
+                # For now, we implement the logic directly for clarity
+                has_errors = False
+                for i, rsid in enumerate(selected_rsids):
+                    progress_text = f"Mise en cache de {suite_options[rsid]} ({rsid})... ({i+1}/{len(selected_rsids)})"
+                    progress_bar.progress((i + 1) / len(selected_rsids), text=progress_text)
+                    
+                    with st.spinner(progress_text):
+                        # The controller function already saves to cache if force_refresh=True
+                        _, error_msg = get_or_refresh_components(full_config, rsid, force_refresh=True)
+                    
+                    if error_msg:
+                        st.error(f"Erreur pour {rsid}: {error_msg}")
+                        has_errors = True
+
+                progress_bar.empty()
+                if not has_errors:
+                    st.success("Mise en cache terminée avec succès !")
+                else:
+                    st.warning("Certaines Report Suites n'ont pas pu être mises en cache. Voir les erreurs ci-dessus.")
+                
+                # Rerun to update cache status in the multiselect display
                 st.rerun()
 
-        if is_active:
-            if cols[2].button("Tester la Connexion", key=f"test_adobe_{name}"):
-                with st.spinner("Test de la connexion..."):
-                    # This controller function will need refactoring to accept a dict
-                    st.session_state['adobe_discovery_result'] = test_adobe_discovery(config)
-                st.rerun()
-        st.divider()
-
-# --- Render Adobe Cache Management ---
-_render_adobe_cache_section()
+st.divider()
+st.info("💡 Les composants (dimensions, métriques, segments) mis en cache sont utilisés dans toute l'application pour accélérer l'affichage et réduire les appels API.")

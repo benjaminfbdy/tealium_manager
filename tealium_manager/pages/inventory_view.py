@@ -8,60 +8,44 @@ from utils.settings import load_inventory_columns, save_inventory_columns
 
 def render_inventory_view():
     setup_page()
-    st.header("🔬 Inventaire des Composants")
+    st.header("🔬 Inventaire des Composants Tealium")
     st.write("Cette fonctionnalité recherche des composants dans les données locales en cache. Assurez-vous d'avoir téléchargé les profils via la page 'Configuration Tealium'.")
     st.markdown("---")
 
     # --- Setup and Profile Selection ---
     try:
-        # NEW: Load configurations directly from secrets.toml
         profiles_from_secrets = st.secrets.get("tealium_profiles", {})
         if not profiles_from_secrets:
-            st.warning("Aucune configuration de profil Tealium n'a été trouvée dans votre `secrets.toml` sous la section `[tealium_profiles]`.")
+            st.warning("Aucune configuration de profil Tealium n'a été trouvée dans votre `secrets.toml`.")
+            st.page_link("pages/1_Config_Tealium.py", label="Aller à la Configuration", icon="⚙️")
             st.stop()
         
-        # The key of the dict is the profile name
-        profile_options = {f"{config['account']}/{config['profile']} ({name})": name for name, config in profiles_from_secrets.items()}
+        profile_options = {name: f"{config['account']}/{config['profile']} ({name})" for name, config in profiles_from_secrets.items()}
         
-        # --- Bulk Selection Logic ---
-        col_sel1, col_sel2 = st.columns([3, 1])
-        
-        if "inventory_selected_profiles" not in st.session_state:
-            st.session_state.inventory_selected_profiles = []
-
-        with col_sel2:
-            st.write("") # Spacer
-            st.write("")
-            if st.button("Tout sélectionner", use_container_width=True):
-                st.session_state.inventory_selected_profiles = list(profile_options.keys())
-                st.rerun()
-            if st.button("Tout désélectionner", use_container_width=True):
-                st.session_state.inventory_selected_profiles = []
-                st.rerun()
-
-        with col_sel1:
-            selected_profile_display_keys = st.multiselect(
-                "Sélectionnez les profils à analyser", 
-                options=list(profile_options.keys()),
-                key="inventory_selected_profiles"
-            )
+        selected_config_name = st.selectbox(
+            "Sélectionnez le profil à analyser", 
+            options=list(profile_options.keys()),
+            format_func=lambda name: profile_options[name]
+        )
             
-        selected_config_names = [profile_options[key] for key in selected_profile_display_keys]
     except Exception as e:
         st.error(f"Une erreur est survenue lors du chargement des profils depuis `secrets.toml`: {e}")
         return
     
-    # --- Display Cache Status ---
-    if selected_config_names:
-        st.subheader("Statut du Cache des Profils Sélectionnés")
-        for config_name in selected_config_names:
-            _, timestamp = get_cached_profile(config_name)
-            display_name = next((key for key, name in profile_options.items() if name == config_name), config_name)
-            if timestamp:
-                st.success(f"✅ **{display_name}**: Mis en cache le {datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')}")
-            else:
-                st.error(f"❌ **{display_name}**: Pas de données en cache. Veuillez le mettre à jour depuis la page 'Configuration Tealium'.")
-        st.markdown("---")
+    # --- Check Cache Status and Proceed ---
+    if not selected_config_name:
+        st.info("Veuillez sélectionner un profil pour commencer.")
+        return
+
+    full_profile_data, timestamp = get_cached_profile(selected_config_name)
+
+    if not full_profile_data:
+        st.error(f"Le profil '{profile_options[selected_config_name]}' n'est pas en cache. Veuillez le mettre à jour.")
+        st.page_link("pages/1_Config_Tealium.py", label="Aller à la page de Configuration Tealium", icon="⚙️")
+        st.stop()
+
+    st.success(f"✅ Profil '{profile_options[selected_config_name]}' chargé depuis le cache (dernière mise à jour : {datetime.datetime.fromtimestamp(timestamp).strftime('%d/%m/%Y %H:%M')})")
+    st.markdown("---")
 
     # --- Search Inputs ---
     col1, col2 = st.columns(2)
@@ -70,42 +54,38 @@ def render_inventory_view():
 
     # --- Search Execution ---
     if st.button("Lancer l'inventaire"):
-        if not selected_config_names or not component_types:
-            st.warning("Veuillez sélectionner au moins un profil et un type de composant.")
+        if not component_types:
+            st.warning("Veuillez sélectionner au moins un type de composant.")
             return
 
         keywords = [k.strip().lower() for k in keywords_input.split(',') if k.strip()]
         inventory_data = []
         
-        with st.spinner("Analyse des profils en cache..."):
-            # --- Data Gathering ---
-            for config_name in selected_config_names:
-                full_profile_data, _ = get_cached_profile(config_name)
-                if not full_profile_data: continue
-                profile_details = next((key for key, name in profile_options.items() if name == config_name), config_name)
-                
-                search_logic = {"Tags": "tags", "Extensions": "extensions", "Load Rules": "loadRules", "Variables": "variables"}
-                for comp_type_label, comp_type_key in search_logic.items():
-                    if comp_type_label in component_types:
-                        components = full_profile_data.get(comp_type_key) or []
-                        items_to_search = components.values() if isinstance(components, dict) else components
-                        
-                        for item in items_to_search:
-                            if isinstance(item, dict) and 'name' in item:
-                                match = False
-                                if not keywords:
-                                    match = True
-                                else:
-                                    for keyword in keywords:
-                                        if keyword in item['name'].lower():
-                                            match = True
-                                            break
-                                
-                                if match:
-                                    entry = item.copy()
-                                    entry['Profil'] = profile_details
-                                    entry['Type de Composant'] = comp_type_label
-                                    inventory_data.append(entry)
+        with st.spinner("Analyse du profil en cache..."):
+            profile_display_name = profile_options[selected_config_name]
+            
+            search_logic = {"Tags": "tags", "Extensions": "extensions", "Load Rules": "loadRules", "Variables": "variables"}
+            for comp_type_label, comp_type_key in search_logic.items():
+                if comp_type_label in component_types:
+                    components = full_profile_data.get(comp_type_key) or []
+                    items_to_search = components.values() if isinstance(components, dict) else components
+                    
+                    for item in items_to_search:
+                        if isinstance(item, dict) and 'name' in item:
+                            match = False
+                            if not keywords:
+                                match = True
+                            else:
+                                for keyword in keywords:
+                                    if keyword in item['name'].lower():
+                                        match = True
+                                        break
+                            
+                            if match:
+                                entry = item.copy()
+                                entry['Profil'] = profile_display_name
+                                entry['Type de Composant'] = comp_type_label
+                                inventory_data.append(entry)
         
         st.session_state['inventory_results'] = inventory_data
 
