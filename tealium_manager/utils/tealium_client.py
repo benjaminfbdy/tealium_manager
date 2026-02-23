@@ -23,7 +23,7 @@ class TealiumClient:
 
     def _request(self, method, url, **kwargs):
         """Makes an HTTP request, using proxies and SSL verification settings if configured."""
-        if self.proxies and (self.proxies.get('http') or self.proxies.get('https'):
+        if self.proxies and (self.proxies.get('http') or self.proxies.get('https')):
             kwargs['proxies'] = self.proxies
         
         kwargs['verify'] = self.verify_ssl
