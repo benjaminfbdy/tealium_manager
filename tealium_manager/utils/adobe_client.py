@@ -55,28 +55,33 @@ class AdobeClient:
     def _get_proxy_url_string(self, settings: Dict) -> Optional[str]:
         """
         Helper to create a proxy URL string by reading a 'proxy' sub-dictionary 
-        from the settings.
+        from the settings. It accommodates different key naming conventions and
+        optional authentication.
         """
         proxy_settings = settings.get("proxy")
         if not isinstance(proxy_settings, dict):
-            # This is the normal case when no proxy is configured.
             return None
 
-        proxy_host = proxy_settings.get("host")
-        proxy_user = proxy_settings.get("user")
-        proxy_password = proxy_settings.get("password")
-
-        if proxy_host and proxy_user and proxy_password:
-            proxy_port = proxy_settings.get("port", "8080")
-            # URL-encode only the password to handle special characters
-            encoded_password = quote(str(proxy_password), safe='')
-            proxy_auth_url = f"http://{proxy_user}:{encoded_password}@{proxy_host}:{proxy_port}"
-            logger.info(f"Proxy enabled and configured for host: {proxy_host}")
-            return proxy_auth_url
+        proxy_host = proxy_settings.get("host") or proxy_settings.get("proxy_host")
+        if not proxy_host:
+            logger.info("Proxy config section found, but 'host' key is missing. Proceeding with direct connection.")
+            return None
         
-        # This message is for when the [proxy] section is present but incomplete.
-        logger.info("Proxy config found, but 'host', 'user', or 'password' keys are missing. Proceeding with direct connection.")
-        return None
+        proxy_port = proxy_settings.get("port") or proxy_settings.get("proxy_port", "8080")
+        proxy_user = proxy_settings.get("user") or proxy_settings.get("proxy_user")
+        proxy_password = proxy_settings.get("password") or proxy_settings.get("proxy_password")
+
+        if proxy_user and proxy_password:
+            # Authenticated proxy
+            encoded_password = quote(str(proxy_password), safe='')
+            proxy_url = f"http://{proxy_user}:{encoded_password}@{proxy_host}:{proxy_port}"
+            logger.info(f"Authenticated proxy enabled and configured for host: {proxy_host}")
+        else:
+            # Unauthenticated proxy
+            proxy_url = f"http://{proxy_host}:{proxy_port}"
+            logger.info(f"Unauthenticated proxy enabled and configured for host: {proxy_host}")
+            
+        return proxy_url
 
     def _refresh_oauth_token(self):
         """Retrieves an access token using OAuth 2.0 client credentials flow."""
