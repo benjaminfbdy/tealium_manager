@@ -51,6 +51,23 @@ class AdobeClient:
         # --- Proxy Setup ---
         self.proxy_url_string = self._get_proxy_url_string(config)
         self.proxies = {"http": self.proxy_url_string, "https": self.proxy_url_string} if self.proxy_url_string else None
+        self.verify_ssl = self._get_ssl_verify_setting(config)
+
+    def _get_ssl_verify_setting(self, settings: Dict) -> bool:
+        """
+        Determines if SSL verification should be enabled based on proxy settings.
+        Defaults to True.
+        """
+        proxy_settings = settings.get("proxy", {})
+        if not isinstance(proxy_settings, dict):
+            return True
+        
+        verify = proxy_settings.get("verify_ssl", True)
+        if str(verify).lower() == 'false':
+            logger.warning("SSL certificate verification is DISABLED. This is insecure and should only be used in trusted corporate environments.")
+            return False
+        return True
+
 
     def _get_proxy_url_string(self, settings: Dict) -> Optional[str]:
         """
@@ -97,9 +114,9 @@ class AdobeClient:
         if self.use_token_v2:
             endpoint = self.OAUTH_TOKEN_ENDPOINT_V2
             # The v2 endpoint requires parameters in the URL, not the body for client_credentials
-            response = requests.post(endpoint, params=data, proxies=self.proxies)
+            response = requests.post(endpoint, params=data, proxies=self.proxies, verify=self.verify_ssl)
         else:
-            response = requests.post(endpoint, data=data, proxies=self.proxies)
+            response = requests.post(endpoint, data=data, proxies=self.proxies, verify=self.verify_ssl)
 
         response.raise_for_status()
         token_data = response.json()
@@ -145,7 +162,7 @@ class AdobeClient:
         while True:
             for attempt in range(max_retries):
                 try:
-                    response = requests.post(endpoint, headers=headers, json=report_definition, proxies=self.proxies, timeout=120) # Add a timeout
+                    response = requests.post(endpoint, headers=headers, json=report_definition, proxies=self.proxies, timeout=120, verify=self.verify_ssl) # Add a timeout
                     response.raise_for_status()
                     page_data = response.json()
                     break # Success, exit retry loop
@@ -186,7 +203,7 @@ class AdobeClient:
         while True:
             try:
                 params = {"limit": 50, "page": page}
-                response = requests.get(rs_endpoint, headers=headers, params=params, proxies=self.proxies)
+                response = requests.get(rs_endpoint, headers=headers, params=params, proxies=self.proxies, verify=self.verify_ssl)
                 logger.info(f"Get Report Suites request to {rs_endpoint} (page {page}) completed with status {response.status_code}.")
                 response.raise_for_status()
                 page_data = response.json()
@@ -220,7 +237,7 @@ class AdobeClient:
         }
         discovery_endpoint = "https://analytics.adobe.io/discovery/me"
         try:
-            response = requests.get(discovery_endpoint, headers=headers, proxies=self.proxies)
+            response = requests.get(discovery_endpoint, headers=headers, proxies=self.proxies, verify=self.verify_ssl)
             logger.info(f"Discovery request to {discovery_endpoint} completed with status {response.status_code}.")
             logger.info(f"Discovery response preview: {response.text[:500]}")
             response.raise_for_status()
@@ -261,7 +278,7 @@ class AdobeClient:
             request_params.update({"limit": limit, "page": page})
             
             try:
-                response = requests.get(endpoint, headers=headers, params=request_params, proxies=self.proxies)
+                response = requests.get(endpoint, headers=headers, params=request_params, proxies=self.proxies, verify=self.verify_ssl)
                 logger.info(f"Request to {endpoint} (page {page}) completed with status {response.status_code}.")
                 response.raise_for_status()
                 page_data = response.json()
@@ -324,7 +341,7 @@ class AdobeClient:
         params = {"expansion": "definition"}
         try:
             logger.info(f"Fetching definition for segment ID: {segment_id}")
-            response = requests.get(endpoint, headers=headers, params=params, proxies=self.proxies)
+            response = requests.get(endpoint, headers=headers, params=params, proxies=self.proxies, verify=self.verify_ssl)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:

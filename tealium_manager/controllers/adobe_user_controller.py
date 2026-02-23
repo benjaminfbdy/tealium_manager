@@ -67,10 +67,11 @@ async def _get_users_for_organization_async(_config: Dict) -> List[Dict]:
     access_token = client.access_token
     
     proxy_url = client.proxy_url_string
+    connector = aiohttp.TCPConnector(ssl=client.verify_ssl)
     
     headers = {"Authorization": f"Bearer {access_token}", "x-api-key": api_key}
 
-    async with aiohttp.ClientSession(headers=headers, proxy=proxy_url) as session:
+    async with aiohttp.ClientSession(headers=headers, proxy=proxy_url, connector=connector) as session:
         while True:
             url = f"{USER_MANAGEMENT_BASE_URL}/users/{org_id}/{page}"
             try:
@@ -147,7 +148,8 @@ async def add_user(config: Dict, email: str, firstname: str, lastname: str, grou
     url = f"{USER_MANAGEMENT_BASE_URL}/action/{org_id}"
     
     proxy_url = client.proxy_url_string
-    async with aiohttp.ClientSession(headers=headers, proxy=proxy_url) as session:
+    connector = aiohttp.TCPConnector(ssl=client.verify_ssl)
+    async with aiohttp.ClientSession(headers=headers, proxy=proxy_url, connector=connector) as session:
         try:
             async with session.post(url, json=payload) as response:
                 response_json = await response.json()
@@ -211,7 +213,8 @@ async def delete_user(config: Dict, email: str) -> Dict:
     url = f"{USER_MANAGEMENT_BASE_URL}/action/{org_id}"
     
     proxy_url = client.proxy_url_string
-    async with aiohttp.ClientSession(headers=headers, proxy=proxy_url) as session:
+    connector = aiohttp.TCPConnector(ssl=client.verify_ssl)
+    async with aiohttp.ClientSession(headers=headers, proxy=proxy_url, connector=connector) as session:
         try:
             async with session.post(url, json=payload) as response:
                 response_json = await response.json()
@@ -260,7 +263,8 @@ async def update_user(config: Dict, email: str, commands: List[Dict]) -> Dict:
     url = f"{USER_MANAGEMENT_BASE_URL}/action/{org_id}"
 
     proxy_url = client.proxy_url_string
-    async with aiohttp.ClientSession(headers=headers, proxy=proxy_url) as session:
+    connector = aiohttp.TCPConnector(ssl=client.verify_ssl)
+    async with aiohttp.ClientSession(headers=headers, proxy=proxy_url, connector=connector) as session:
         try:
             async with session.post(url, json=payload) as response:
                 response_json = await response.json()
