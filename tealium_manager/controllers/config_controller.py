@@ -8,42 +8,6 @@ from utils.adobe_client import AdobeClient
 from utils.tealium_repo import cache_profile_data
 from database import get_db_status, reset_database
 
-# --- Helper Functions ---
-
-def _create_proxies_dict() -> Optional[Dict]:
-    """Helper to create a proxy dictionary if credentials are provided in secrets."""
-    try:
-        # Check if proxy section exists and is not empty
-        if 'proxy' in st.secrets and st.secrets.proxy:
-            proxy_config = st.secrets.proxy.to_dict()
-            proxy_user = proxy_config.get("user")
-            proxy_password = proxy_config.get("password")
-            if proxy_user and proxy_password:
-                proxy_host = proxy_config.get("host", "your.proxy.host.com")
-                proxy_port = proxy_config.get("port", "8080")
-                encoded_user = quote(proxy_user)
-                encoded_password = quote(proxy_password)
-                proxy_auth_url = f"http://{encoded_user}:{encoded_password}@{proxy_host}:{proxy_port}"
-                return {"http": proxy_auth_url, "https": proxy_auth_url}
-    except AttributeError:
-        # This can happen if st.secrets.proxy is not a table.
-        return None
-    return None
-
-def _get_adobe_client(config: Dict) -> Optional[AdobeClient]:
-    """Initializes and returns an AdobeClient from a config dictionary."""
-    if not config:
-        return None
-    try:
-        # Add proxy settings to the Adobe client config if they exist
-        proxies = _create_proxies_dict()
-        if proxies:
-            config['proxies'] = proxies
-        return AdobeClient(config)
-    except Exception as e:
-        print(f"Error instantiating AdobeClient: {e}")
-        return None
-
 # --- Tealium Actions ---
 
 def get_tealium_connection_status(config: Dict) -> bool:
@@ -51,14 +15,12 @@ def get_tealium_connection_status(config: Dict) -> bool:
     if not config or not all(config.get(k) for k in ["account", "profile", "tealium_api_username", "tealium_api_key"]):
         return False
     try:
-        proxies = _create_proxies_dict()
-        client = TealiumClient(
-            account=config.get("account"),
-            profile=config.get("profile"),
-            api_key=config.get("tealium_api_key"),
-            email=config.get("tealium_api_username"),
-            proxies=proxies
-        )
+        # Prepare a config dict that includes proxy settings if they exist
+        client_config = config.copy()
+        if 'proxy' in st.secrets:
+            client_config['proxy'] = st.secrets.proxy.to_dict()
+
+        client = TealiumClient(client_config)
         client._authenticate_v2()
         return bool(client.token_v2)
     except Exception as e:
@@ -72,14 +34,12 @@ def handle_download_profile(profile_name: str, config: Dict) -> bool:
         return False
         
     try:
-        proxies = _create_proxies_dict()
-        client = TealiumClient(
-            account=config["account"],
-            profile=config["profile"],
-            api_key=config["tealium_api_key"],
-            email=config["tealium_api_username"],
-            proxies=proxies
-        )
+        # Prepare a config dict that includes proxy settings if they exist
+        client_config = config.copy()
+        if 'proxy' in st.secrets:
+            client_config['proxy'] = st.secrets.proxy.to_dict()
+
+        client = TealiumClient(client_config)
         component_types_to_fetch = ["tags", "extensions", "loadRules", "variables"]
         profile_data_response = client.get_profile_components(component_types=component_types_to_fetch)
         

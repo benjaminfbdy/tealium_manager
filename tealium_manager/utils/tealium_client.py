@@ -3,12 +3,13 @@ import requests
 from typing import Dict, List, Optional
 
 class TealiumClient:
-    def __init__(self, account: str, profile: str, api_key: str, email: str, proxies: Optional[Dict] = None):
+    def __init__(self, account: str, profile: str, api_key: str, email: str, proxies: Optional[Dict] = None, verify_ssl: bool = True):
         self.account = account
         self.profile = profile
         self.api_key = api_key
         self.email = email
         self.proxies = proxies
+        self.verify_ssl = verify_ssl
         
         if not all([self.account, self.profile, self.api_key, self.email]):
             raise ValueError("Les identifiants Tealium (compte, profil, clé API, email) sont obligatoires.")
@@ -21,9 +22,16 @@ class TealiumClient:
         self.host_v3 = None
 
     def _request(self, method, url, **kwargs):
-        """Makes an HTTP request, using proxies if configured."""
-        if self.proxies and (self.proxies.get('http') or self.proxies.get('https')):
+        """Makes an HTTP request, using proxies and SSL verification settings if configured."""
+        if self.proxies and (self.proxies.get('http') or self.proxies.get('https'):
             kwargs['proxies'] = self.proxies
+        
+        kwargs['verify'] = self.verify_ssl
+        if not self.verify_ssl:
+            # Suppress only the single InsecureRequestWarning from urllib3
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            
         # The calling method is expected to handle exceptions
         return requests.request(method, url, **kwargs)
 
