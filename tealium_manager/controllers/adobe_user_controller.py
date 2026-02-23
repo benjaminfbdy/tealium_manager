@@ -3,7 +3,7 @@ import pandas as pd
 import asyncio
 import aiohttp
 import logging
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Coroutine
 
 from utils.adobe_client import AdobeClient
 
@@ -27,9 +27,13 @@ def _get_user_management_client(config: Dict) -> Optional[AdobeClient]:
         return None
 
     try:
-        config['auth_method'] = 'oauth'
+        client_config = config.copy()
+        if "proxy" in st.secrets:
+            client_config["proxy"] = st.secrets.proxy.to_dict()
+
+        client_config['auth_method'] = 'oauth'
         client = AdobeClient(
-            config=config, 
+            config=client_config, 
             scope=USER_MANAGEMENT_SCOPE, 
             api_base_url=USER_MANAGEMENT_BASE_URL,
             use_token_v2=True
@@ -62,9 +66,11 @@ async def _get_users_for_organization_async(_config: Dict) -> List[Dict]:
     api_key = client.api_key
     access_token = client.access_token
     
+    proxy_url = client.proxy_url_string
+    
     headers = {"Authorization": f"Bearer {access_token}", "x-api-key": api_key}
 
-    async with aiohttp.ClientSession(headers=headers) as session:
+    async with aiohttp.ClientSession(headers=headers, proxy=proxy_url) as session:
         while True:
             url = f"{USER_MANAGEMENT_BASE_URL}/users/{org_id}/{page}"
             try:
@@ -140,7 +146,8 @@ async def add_user(config: Dict, email: str, firstname: str, lastname: str, grou
 
     url = f"{USER_MANAGEMENT_BASE_URL}/action/{org_id}"
     
-    async with aiohttp.ClientSession(headers=headers) as session:
+    proxy_url = client.proxy_url_string
+    async with aiohttp.ClientSession(headers=headers, proxy=proxy_url) as session:
         try:
             async with session.post(url, json=payload) as response:
                 response_json = await response.json()
@@ -151,11 +158,11 @@ async def add_user(config: Dict, email: str, firstname: str, lastname: str, grou
                 
                 if response_json.get("result") == "success":
                     logger.info(f"Utilisateur {email} ajouté avec succès.")
-                    return {"success": True}
+                    return {"success": True, "details": response_json}
                 else:
                     logger.error(f"Erreur lors de l'ajout de l'utilisateur (résultat non-succès): {response_json}")
                     error_detail = response_json.get("errors", "Détail non fourni.")
-                    return {"success": False, "error": f"Erreur de l'API : {error_detail}"}
+                    return {"success": False, "error": f"Erreur de l'API : {error_detail}", "details": response_json}
 
         except aiohttp.ClientResponseError as e:
             logger.error(f"Erreur de connexion API Adobe lors de l'ajout de l'utilisateur : {e.status} {e.message}")
@@ -203,7 +210,8 @@ async def delete_user(config: Dict, email: str) -> Dict:
 
     url = f"{USER_MANAGEMENT_BASE_URL}/action/{org_id}"
     
-    async with aiohttp.ClientSession(headers=headers) as session:
+    proxy_url = client.proxy_url_string
+    async with aiohttp.ClientSession(headers=headers, proxy=proxy_url) as session:
         try:
             async with session.post(url, json=payload) as response:
                 response_json = await response.json()
@@ -214,11 +222,11 @@ async def delete_user(config: Dict, email: str) -> Dict:
 
                 if response_json.get("result") == "success":
                     logger.info(f"Utilisateur {email} supprimé avec succès.")
-                    return {"success": True}
+                    return {"success": True, "details": response_json}
                 else:
                     logger.error(f"Erreur lors de la suppression (résultat non-succès): {response_json}")
                     error_detail = response_json.get("errors", "Détail non fourni.")
-                    return {"success": False, "error": f"Erreur de l'API : {error_detail}"}
+                    return {"success": False, "error": f"Erreur de l'API : {error_detail}", "details": response_json}
 
         except aiohttp.ClientResponseError as e:
             logger.error(f"Erreur de connexion API Adobe lors de la suppression : {e.status} {e.message}")
@@ -251,7 +259,8 @@ async def update_user(config: Dict, email: str, commands: List[Dict]) -> Dict:
     payload = [{"user": email, "requestID": f"update_{email}", "do": commands}]
     url = f"{USER_MANAGEMENT_BASE_URL}/action/{org_id}"
 
-    async with aiohttp.ClientSession(headers=headers) as session:
+    proxy_url = client.proxy_url_string
+    async with aiohttp.ClientSession(headers=headers, proxy=proxy_url) as session:
         try:
             async with session.post(url, json=payload) as response:
                 response_json = await response.json()
@@ -260,9 +269,9 @@ async def update_user(config: Dict, email: str, commands: List[Dict]) -> Dict:
                     return {"success": False, "error": f"Erreur {response.status}: {error_message}"}
 
                 if response_json.get("result") == "success":
-                    return {"success": True}
+                    return {"success": True, "details": response_json}
                 else:
                     error_detail = response_json.get("errors", "Détail non fourni.")
-                    return {"success": False, "error": f"Erreur de l'API : {error_detail}"}
+                    return {"success": False, "error": f"Erreur de l'API : {error_detail}", "details": response_json}
         except Exception as e:
             return {"success": False, "error": f"Erreur inattendue : {e}"}

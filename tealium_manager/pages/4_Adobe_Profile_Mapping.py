@@ -2,9 +2,11 @@ import streamlit as st
 import pandas as pd
 from typing import List, Dict
 
+from views.component_renderers import setup_page
+
 from controllers.adobe_user_controller import get_users_for_organization
 
-st.set_page_config(page_title="Cartographie des Profils Adobe", layout="wide")
+setup_page()
 st.title("🗺️ Cartographie des Profils de Produit Adobe")
 
 # --- Main View ---

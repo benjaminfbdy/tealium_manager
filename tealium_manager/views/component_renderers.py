@@ -36,7 +36,7 @@ def render_sidebar():
         st.session_state.active_adobe_profile_name = None
 
     st.sidebar.divider()
-    st.sidebar.caption("🚀 Tealium Manager v0.8 (Refactored)")
+    st.sidebar.caption("🚀 Tealium Manager v0.9 (UMAPI & Proxy)")
 
 
 def setup_page():

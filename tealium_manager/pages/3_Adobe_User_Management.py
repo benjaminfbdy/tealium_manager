@@ -2,7 +2,9 @@ import streamlit as st
 import sys
 import pandas as pd
 import asyncio
-from typing import Dict, List
+from typing import Dict, List, Coroutine
+
+from views.component_renderers import setup_page
 
 # No more diagnostics needed
 # st.write(f"Version de Streamlit utilisée : **{st.__version__}**")
@@ -11,7 +13,7 @@ from typing import Dict, List
 from controllers.adobe_user_controller import get_users_for_organization, add_user, delete_user, update_user
 
 # --- Page Config ---
-st.set_page_config(page_title="Gestion des Utilisateurs Adobe", layout="wide")
+setup_page()
 st.title("👨‍💼 Gestion des Utilisateurs Adobe")
 
 # --- State Management ---
@@ -89,7 +91,11 @@ def user_dialog(config: dict, mode: str, raw_users_list: List, user_data: pd.Ser
                             commands=commands
                         ))
                     if result.get("success"):
-                        st.session_state.last_op_success_message = f"Utilisateur {email} mis à jour avec succès !"
+                        details = result.get("details", {})
+                        message = f"Utilisateur {email} mis à jour avec succès."
+                        if "completed" in details:
+                            message += f" (Opérations complétées: {details.get('completed', 0)})"
+                        st.session_state.last_op_success_message = message
                         get_users_for_organization.clear() # Clear cache on success
                     else:
                         st.error(f"Erreur lors de la mise à jour : {result.get('error', 'Erreur inconnue')}")
@@ -104,7 +110,11 @@ def user_dialog(config: dict, mode: str, raw_users_list: List, user_data: pd.Ser
                         groups=product_profiles
                     ))
                 if result.get("success"):
-                    st.session_state.last_op_success_message = f"Utilisateur {email} ajouté avec succès !"
+                    details = result.get("details", {})
+                    message = f"Utilisateur {email} ajouté avec succès."
+                    if "completed" in details:
+                        message += f" (Opérations complétées: {details.get('completed', 0)})"
+                    st.session_state.last_op_success_message = message
                     get_users_for_organization.clear() # Clear cache on success
                 else:
                     st.error(f"Erreur lors de l'ajout : {result.get('error', 'Erreur inconnue')}")

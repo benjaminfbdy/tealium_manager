@@ -24,41 +24,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# --- Proxy Helpers ---
-def _create_proxies_dict() -> Optional[Dict]:
-    """Helper to create a proxy dictionary if credentials are provided in secrets."""
-    try:
-        proxy_section = st.secrets.get("proxy")
-        if proxy_section:
-            proxy_config = dict(proxy_section)
-            proxy_user = proxy_config.get("user")
-            proxy_password = proxy_config.get("password")
-            if proxy_user and proxy_password:
-                proxy_host = proxy_config.get("host", "your.proxy.host.com")
-                proxy_port = proxy_config.get("port", "8080")
-                encoded_user = quote(proxy_user)
-                encoded_password = quote(proxy_password)
-                proxy_auth_url = f"http://{encoded_user}:{encoded_password}@{proxy_host}:{proxy_port}"
-                return {"http": proxy_auth_url, "https": proxy_auth_url}
-    except Exception:
-        pass
-    return None
 
-def _prepare_config_with_proxies(config: Dict) -> Dict:
-    """Ensures the config dict has proxy settings if available in secrets."""
-    if not config: return {}
-    config_copy = dict(config)
-    proxies = _create_proxies_dict()
-    if proxies:
-        config_copy['proxies'] = proxies
-    return config_copy
 
 def get_or_refresh_components(adobe_config: Dict, rsid: str, force_refresh: bool = False) -> (Optional[Dict], Optional[str]):
     """Gets Adobe Analytics components for a given RSID using the provided configuration."""
     if not adobe_config: return None, "Aucune configuration Adobe n'a été fournie."
     try:
-        adobe_config = _prepare_config_with_proxies(adobe_config)
-        client = AdobeClient(adobe_config)
+        client_config = adobe_config.copy()
+        if "proxy" in st.secrets:
+            client_config["proxy"] = st.secrets.proxy.to_dict()
+        client = AdobeClient(client_config)
         components = client.get_adobe_dashboard_components(rsid, force_refresh=force_refresh)
         if components.get("error"): return None, components.get("error")
         return components, None
@@ -71,8 +46,10 @@ def get_report_suites(adobe_config: Dict) -> (List[Dict[str, str]], Optional[str
     """Fetches the list of report suites available for the provided Adobe configuration."""
     if not adobe_config: return [], "Aucune configuration Adobe n'a été fournie."
     try:
-        adobe_config = _prepare_config_with_proxies(adobe_config)
-        client = AdobeClient(adobe_config)
+        client_config = adobe_config.copy()
+        if "proxy" in st.secrets:
+            client_config["proxy"] = st.secrets.proxy.to_dict()
+        client = AdobeClient(client_config)
         suites_response = client.get_report_suites()
         if suites_response.get("error_code") == "403025":
             return [], f"Erreur Adobe (403): Permissions insuffisantes. Détail: {suites_response.get('message')}"
@@ -150,7 +127,10 @@ async def _fetch_global_audit_worker(session, adobe_config, dimension_id, dimens
 async def run_global_report_async(adobe_config: Dict, rsid: str, definition: Dict, status_callback: any, segment_map: Dict = None) -> (Optional[pd.DataFrame], str):
     try:
         definition['rsid'] = rsid
-        client = AdobeClient(adobe_config)
+        client_config = adobe_config.copy()
+        if "proxy" in st.secrets:
+            client_config["proxy"] = st.secrets.proxy.to_dict()
+        client = AdobeClient(client_config)
         client._ensure_token()
         dimensions_to_audit = [(f"variables/evar{i}", f"eVar{i}") for i in range(1, 201)] + [(f"variables/prop{i}", f"Prop{i}") for i in range(1, 76)]
         headers = {"Authorization": f"Bearer {client.access_token}"}
@@ -194,7 +174,10 @@ async def run_global_report_async(adobe_config: Dict, rsid: str, definition: Dic
 
 def run_custom_report(adobe_config: Dict, rsid: str, definition: Dict) -> (Optional[pd.DataFrame], str):
     try:
-        client, granularity = AdobeClient(adobe_config), definition['granularity']
+        client_config = adobe_config.copy()
+        if "proxy" in st.secrets:
+            client_config["proxy"] = st.secrets.proxy.to_dict()
+        client, granularity = AdobeClient(client_config), definition['granularity']
         time_dimension = {'minute': 'variables/daterangeminute', 'hour': 'variables/daterangehour', 'day': 'variables/daterangeday', 'week': 'variables/daterangeweek', 'month': 'variables/daterangemonth'}.get(granularity, 'variables/daterangeday')
 
         def _execute_for_period(period_range: str, columns: List[Dict]) -> Optional[pd.DataFrame]:

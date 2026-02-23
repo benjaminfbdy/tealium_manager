@@ -49,21 +49,33 @@ class AdobeClient:
         self.api_base_url = api_base_url or f"https://analytics.adobe.io/api/{self.global_company_id}"
 
         # --- Proxy Setup ---
-        self.proxies = self._create_proxies_dict(config)
+        self.proxy_url_string = self._get_proxy_url_string(config)
+        self.proxies = {"http": self.proxy_url_string, "https": self.proxy_url_string} if self.proxy_url_string else None
 
-    def _create_proxies_dict(self, settings: Dict) -> Optional[Dict]:
-        """Helper to create a proxy dictionary if credentials are provided."""
-        proxy_user = settings.get("proxy_user")
-        proxy_password = settings.get("proxy_password")
-        if proxy_user and proxy_password:
-            proxy_host = None  # TODO: Configure proxy via environment variables if needed
-            proxy_port = "8080"
-            # URL-encode only the password to handle special characters, matching user's working script.
-            encoded_password = quote(proxy_password, safe='')
+    def _get_proxy_url_string(self, settings: Dict) -> Optional[str]:
+        """
+        Helper to create a proxy URL string by reading a 'proxy' sub-dictionary 
+        from the settings.
+        """
+        proxy_settings = settings.get("proxy")
+        if not isinstance(proxy_settings, dict):
+            # This is the normal case when no proxy is configured.
+            return None
+
+        proxy_host = proxy_settings.get("host")
+        proxy_user = proxy_settings.get("user")
+        proxy_password = proxy_settings.get("password")
+
+        if proxy_host and proxy_user and proxy_password:
+            proxy_port = proxy_settings.get("port", "8080")
+            # URL-encode only the password to handle special characters
+            encoded_password = quote(str(proxy_password), safe='')
             proxy_auth_url = f"http://{proxy_user}:{encoded_password}@{proxy_host}:{proxy_port}"
-            logger.info("Proxy enabled and configured with authentication.")
-            return {"http": proxy_auth_url, "https": proxy_auth_url}
-        logger.info("Proxy not configured (user/password missing). Proceeding with direct connection.")
+            logger.info(f"Proxy enabled and configured for host: {proxy_host}")
+            return proxy_auth_url
+        
+        # This message is for when the [proxy] section is present but incomplete.
+        logger.info("Proxy config found, but 'host', 'user', or 'password' keys are missing. Proceeding with direct connection.")
         return None
 
     def _refresh_oauth_token(self):
