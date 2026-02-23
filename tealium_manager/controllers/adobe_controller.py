@@ -19,7 +19,7 @@ from utils.adobe_repo import (
     get_cached_result_by_id, 
     delete_cached_result
 )
-from utils.adobe_client import AdobeAnalyticsClient
+from utils.adobe_client import AdobeClient
 import logging
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ def get_or_refresh_components(adobe_config: Dict, rsid: str, force_refresh: bool
     if not adobe_config: return None, "Aucune configuration Adobe n'a été fournie."
     try:
         adobe_config = _prepare_config_with_proxies(adobe_config)
-        client = AdobeAnalyticsClient(adobe_config)
+        client = AdobeClient(adobe_config)
         components = client.get_adobe_dashboard_components(rsid, force_refresh=force_refresh)
         if components.get("error"): return None, components.get("error")
         return components, None
@@ -72,7 +72,7 @@ def get_report_suites(adobe_config: Dict) -> (List[Dict[str, str]], Optional[str
     if not adobe_config: return [], "Aucune configuration Adobe n'a été fournie."
     try:
         adobe_config = _prepare_config_with_proxies(adobe_config)
-        client = AdobeAnalyticsClient(adobe_config)
+        client = AdobeClient(adobe_config)
         suites_response = client.get_report_suites()
         if suites_response.get("error_code") == "403025":
             return [], f"Erreur Adobe (403): Permissions insuffisantes. Détail: {suites_response.get('message')}"
@@ -150,7 +150,7 @@ async def _fetch_global_audit_worker(session, adobe_config, dimension_id, dimens
 async def run_global_report_async(adobe_config: Dict, rsid: str, definition: Dict, status_callback: any, segment_map: Dict = None) -> (Optional[pd.DataFrame], str):
     try:
         definition['rsid'] = rsid
-        client = AdobeAnalyticsClient(adobe_config)
+        client = AdobeClient(adobe_config)
         client._ensure_token()
         dimensions_to_audit = [(f"variables/evar{i}", f"eVar{i}") for i in range(1, 201)] + [(f"variables/prop{i}", f"Prop{i}") for i in range(1, 76)]
         headers = {"Authorization": f"Bearer {client.access_token}"}
@@ -194,7 +194,7 @@ async def run_global_report_async(adobe_config: Dict, rsid: str, definition: Dic
 
 def run_custom_report(adobe_config: Dict, rsid: str, definition: Dict) -> (Optional[pd.DataFrame], str):
     try:
-        client, granularity = AdobeAnalyticsClient(adobe_config), definition['granularity']
+        client, granularity = AdobeClient(adobe_config), definition['granularity']
         time_dimension = {'minute': 'variables/daterangeminute', 'hour': 'variables/daterangehour', 'day': 'variables/daterangeday', 'week': 'variables/daterangeweek', 'month': 'variables/daterangemonth'}.get(granularity, 'variables/daterangeday')
 
         def _execute_for_period(period_range: str, columns: List[Dict]) -> Optional[pd.DataFrame]:

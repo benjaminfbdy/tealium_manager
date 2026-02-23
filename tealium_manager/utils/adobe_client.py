@@ -1,5 +1,4 @@
 import time
-import jwt
 import requests
 import logging
 import json
@@ -12,37 +11,42 @@ from utils.adobe_repo import load_adobe_components, save_adobe_components
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class AdobeAnalyticsClient:
+class AdobeClient:
     """
-    Client for interacting with the Adobe Analytics 2.0 API.
-    Handles different authentication methods (OAuth 2.0, JWT, Manual) and paginated report requests.
+    Client for interacting with Adobe APIs (Analytics 2.0, User Management, etc.).
+    Handles OAuth 2.0 Server-to-Server and manual authentication.
     """
-    JWT_TOKEN_ENDPOINT = "https://ims-na1.adobelogin.com/ims/exchange/jwt/"
-    OAUTH_TOKEN_ENDPOINT_V3 = "https://ims-na1.adobelogin.com/ims/token/v3"
-    JWT_META_SCOPE = "https://ims-na1.adobelogin.com/c/ent_analytics_bulk_ingest_sdk"
+    OAUTH_TOKEN_ENDPOINT_V2 = "https://ims-na1.adobelogin.com/ims/token/v2" # For User Management
+    OAUTH_TOKEN_ENDPOINT_V3 = "https://ims-na1.adobelogin.com/ims/token/v3" # For Analytics 2.0
+    
+    # Default scope for Analytics 2.0 API
+    ANALYTICS_DEFAULT_SCOPE = "openid,AdobeID,additional_info.projectedProductContext,read_organizations,analytics.read,analytics.write"
 
-    def __init__(self, config: Dict[str, str]):
+    def __init__(self, config: Dict[str, str], scope: Optional[str] = None, api_base_url: Optional[str] = None, use_token_v2: bool = False):
         """
         Initializes the client with a configuration dictionary.
         
         Args:
             config (Dict[str, str]): A dictionary containing Adobe API credentials and global settings.
+            scope (Optional[str]): The OAuth scope(s) to request. Defaults to Analytics scope.
+            api_base_url (Optional[str]): The base URL for the API. Defaults to Analytics.
+            use_token_v2 (bool): If true, uses the v2 token endpoint required by some APIs like User Management.
         """
         # Common
         self.global_company_id = config.get("global_company_id")
         self.auth_method = config.get("auth_method", "oauth")
+        self.scope = scope or self.ANALYTICS_DEFAULT_SCOPE
+        self.use_token_v2 = use_token_v2
 
         # Credentials
         self.api_key = config.get("client_id") or config.get("api_key") # Also Client ID
         self.client_secret = config.get("client_secret")
-        self.tech_account_id = config.get("technical_account_id")
-        self.org_id = config.get("organization_id")
-        self.private_key = config.get("private_key")
+        self.organization_id = config.get("organization_id")
         self.manual_access_token = config.get("manual_access_token")
 
         self.access_token = None
         self.token_expiry = 0
-        self.api_base_url = f"https://analytics.adobe.io/api/{self.global_company_id}"
+        self.api_base_url = api_base_url or f"https://analytics.adobe.io/api/{self.global_company_id}"
 
         # --- Proxy Setup ---
         self.proxies = self._create_proxies_dict(config)
@@ -62,42 +66,24 @@ class AdobeAnalyticsClient:
         logger.info("Proxy not configured (user/password missing). Proceeding with direct connection.")
         return None
 
-    def _generate_jwt(self) -> str:
-        """Generates the JSON Web Token for JWT authentication."""
-        payload = {
-            "exp": int(time.time()) + 600,
-            "iss": self.org_id,
-            "sub": self.tech_account_id,
-            "aud": f"https://ims-na1.adobelogin.com/c/{self.api_key}",
-            self.JWT_META_SCOPE: True
-        }
-        return jwt.encode(payload, self.private_key, algorithm="RS256")
-
-    def _refresh_jwt_token(self):
-        """Exchanges the JWT for an access token."""
-        logger.info("Refreshing Adobe access token using JWT.")
-        data = {
-            "client_id": self.api_key,
-            "client_secret": self.client_secret,
-            "jwt_token": self._generate_jwt()
-        }
-        response = requests.post(self.JWT_TOKEN_ENDPOINT, data=data, proxies=self.proxies)
-        response.raise_for_status()
-        token_data = response.json()
-        self.access_token = token_data["access_token"]
-        self.token_expiry = time.time() + (token_data.get("expires_in", 86400000) / 1000) - 60
-        logger.info("Successfully refreshed Adobe access token using JWT.")
-
     def _refresh_oauth_token(self):
         """Retrieves an access token using OAuth 2.0 client credentials flow."""
-        logger.info("Refreshing Adobe access token using OAuth 2.0.")
+        logger.info(f"Refreshing Adobe access token using OAuth 2.0 with scope: {self.scope}")
         data = {
             "client_id": self.api_key,
             "client_secret": self.client_secret,
             "grant_type": "client_credentials",
-            "scope": "openid,AdobeID,additional_info.projectedProductContext,read_organizations,analytics.read,analytics.write"
+            "scope": self.scope
         }
-        response = requests.post(self.OAUTH_TOKEN_ENDPOINT_V3, data=data, proxies=self.proxies)
+        
+        endpoint = self.OAUTH_TOKEN_ENDPOINT_V3
+        if self.use_token_v2:
+            endpoint = self.OAUTH_TOKEN_ENDPOINT_V2
+            # The v2 endpoint requires parameters in the URL, not the body for client_credentials
+            response = requests.post(endpoint, params=data, proxies=self.proxies)
+        else:
+            response = requests.post(endpoint, data=data, proxies=self.proxies)
+
         response.raise_for_status()
         token_data = response.json()
         self.access_token = token_data["access_token"]
@@ -112,13 +98,12 @@ class AdobeAnalyticsClient:
                 raise ValueError("Manual authentication method selected, but no access token was provided.")
             self.access_token = self.manual_access_token
             return
+        
         if not self.access_token or time.time() >= self.token_expiry:
             if self.auth_method == "oauth":
                 self._refresh_oauth_token()
-            elif self.auth_method == "jwt":
-                self._refresh_jwt_token()
             else:
-                raise ValueError(f"Unsupported authentication method: {self.auth_method}")
+                raise ValueError(f"Unsupported authentication method: {self.auth_method}. Only 'oauth' and 'manual' are supported.")
 
     def get_report(self, report_definition: Dict[str, Any]) -> Dict[str, Any]:
         """Executes a report request and handles pagination."""

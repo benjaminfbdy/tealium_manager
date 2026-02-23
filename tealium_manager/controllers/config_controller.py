@@ -4,7 +4,7 @@ from urllib.parse import quote
 
 # Import clients and repo functions that are still needed (for caching, etc.)
 from utils.tealium_client import TealiumClient
-from utils.adobe_client import AdobeAnalyticsClient
+from utils.adobe_client import AdobeClient
 from utils.tealium_repo import cache_profile_data
 from database import get_db_status, reset_database
 
@@ -30,8 +30,8 @@ def _create_proxies_dict() -> Optional[Dict]:
         return None
     return None
 
-def _get_adobe_client(config: Dict) -> Optional[AdobeAnalyticsClient]:
-    """Initializes and returns an AdobeAnalyticsClient from a config dictionary."""
+def _get_adobe_client(config: Dict) -> Optional[AdobeClient]:
+    """Initializes and returns an AdobeClient from a config dictionary."""
     if not config:
         return None
     try:
@@ -39,9 +39,9 @@ def _get_adobe_client(config: Dict) -> Optional[AdobeAnalyticsClient]:
         proxies = _create_proxies_dict()
         if proxies:
             config['proxies'] = proxies
-        return AdobeAnalyticsClient(config)
+        return AdobeClient(config)
     except Exception as e:
-        print(f"Error instantiating AdobeAnalyticsClient: {e}")
+        print(f"Error instantiating AdobeClient: {e}")
         return None
 
 # --- Tealium Actions ---
@@ -103,7 +103,7 @@ def handle_download_profile(profile_name: str, config: Dict) -> bool:
 # --- Adobe Actions ---
 
 def get_adobe_connection_status(config: Dict) -> bool:
-    """Initializes AdobeAnalyticsClient with a given config and gets a token."""
+    """Initializes AdobeClient with a given config and gets a token."""
     client = _get_adobe_client(config)
     if not client:
         return False

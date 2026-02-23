@@ -15,6 +15,8 @@ def render_sidebar():
     st.sidebar.subheader("Adobe Analytics")
     st.sidebar.page_link("pages/adobe_dashboard_view.py", label="Requeteur")
     st.sidebar.page_link("pages/adobe_reports_view.py", label="Rapports")
+    st.sidebar.page_link("pages/3_Adobe_User_Management.py", label="Gestion Utilisateurs")
+    st.sidebar.page_link("pages/4_Adobe_Profile_Mapping.py", label="Cartographie Profils")
 
     st.sidebar.divider()
     st.sidebar.subheader("Configuration")
