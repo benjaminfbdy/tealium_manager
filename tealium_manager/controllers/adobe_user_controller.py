@@ -129,7 +129,7 @@ async def add_user(config: Dict, email: str, firstname: str, lastname: str, grou
         "requestID": f"add_{email}",
         "do": [
             {
-                "createAdobeID": {
+                "create": {
                     "email": email,
                     "firstname": firstname,
                     "lastname": lastname,
